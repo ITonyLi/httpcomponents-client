@@ -85,7 +85,7 @@ import org.slf4j.LoggerFactory;
 @Contract(threading = ThreadingBehavior.SAFE_CONDITIONAL)
 public class MinimalHttpClient extends CloseableHttpClient {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(MinimalHttpClient.class);
 
     private final HttpClientConnectionManager connManager;
     private final ConnectionReuseStrategy reuseStrategy;
@@ -132,7 +132,7 @@ public class MinimalHttpClient extends CloseableHttpClient {
 
         final HttpRoute route = new HttpRoute(RoutingSupport.normalize(target, schemePortResolver));
         final String exchangeId = ExecSupport.getNextExchangeId();
-        final ExecRuntime execRuntime = new InternalExecRuntime(log, connManager, requestExecutor,
+        final ExecRuntime execRuntime = new InternalExecRuntime(LOG, connManager, requestExecutor,
                 request instanceof CancellableDependency ? (CancellableDependency) request : null);
         try {
             if (!execRuntime.isEndpointAcquired()) {
@@ -142,15 +142,15 @@ public class MinimalHttpClient extends CloseableHttpClient {
                 execRuntime.connectEndpoint(clientContext);
             }
 
-            context.setAttribute(HttpCoreContext.HTTP_REQUEST, request);
-            context.setAttribute(HttpClientContext.HTTP_ROUTE, route);
+            clientContext.setAttribute(HttpCoreContext.HTTP_REQUEST, request);
+            clientContext.setAttribute(HttpClientContext.HTTP_ROUTE, route);
 
-            httpProcessor.process(request, request.getEntity(), context);
+            httpProcessor.process(request, request.getEntity(), clientContext);
             final ClassicHttpResponse response = execRuntime.execute(exchangeId, request, clientContext);
-            httpProcessor.process(response, response.getEntity(), context);
+            httpProcessor.process(response, response.getEntity(), clientContext);
 
-            if (reuseStrategy.keepAlive(request, response, context)) {
-                execRuntime.markConnectionReusable(null, TimeValue.NEG_ONE_MILLISECONDS);
+            if (reuseStrategy.keepAlive(request, response, clientContext)) {
+                execRuntime.markConnectionReusable(null, TimeValue.NEG_ONE_MILLISECOND);
             } else {
                 execRuntime.markConnectionNonReusable();
             }

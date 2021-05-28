@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hc.core5.annotation.Contract;
 import org.apache.hc.core5.annotation.ThreadingBehavior;
 import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
 
 /**
@@ -42,7 +43,7 @@ import org.apache.hc.core5.util.Timeout;
 public class RequestConfig implements Cloneable {
 
     private static final Timeout DEFAULT_CONNECTION_REQUEST_TIMEOUT = Timeout.ofMinutes(3);
-    private static final Timeout DEFAULT_CONNECT_TIMEOUT = Timeout.ofMinutes(3);
+    private static final TimeValue DEFAULT_CONN_KEEP_ALIVE = TimeValue.ofMinutes(3);
 
     public static final RequestConfig DEFAULT = new Builder().build();
 
@@ -58,6 +59,7 @@ public class RequestConfig implements Cloneable {
     private final Timeout connectionRequestTimeout;
     private final Timeout connectTimeout;
     private final Timeout responseTimeout;
+    private final TimeValue connectionKeepAlive;
     private final boolean contentCompressionEnabled;
     private final boolean hardCancellationEnabled;
 
@@ -66,7 +68,7 @@ public class RequestConfig implements Cloneable {
     */
     protected RequestConfig() {
         this(false, null, null, false, false, 0, false, null, null,
-                DEFAULT_CONNECTION_REQUEST_TIMEOUT, DEFAULT_CONNECT_TIMEOUT, null, false, false);
+                DEFAULT_CONNECTION_REQUEST_TIMEOUT, null, null, DEFAULT_CONN_KEEP_ALIVE, false, false);
     }
 
     RequestConfig(
@@ -82,6 +84,7 @@ public class RequestConfig implements Cloneable {
             final Timeout connectionRequestTimeout,
             final Timeout connectTimeout,
             final Timeout responseTimeout,
+            final TimeValue connectionKeepAlive,
             final boolean contentCompressionEnabled,
             final boolean hardCancellationEnabled) {
         super();
@@ -97,209 +100,118 @@ public class RequestConfig implements Cloneable {
         this.connectionRequestTimeout = connectionRequestTimeout;
         this.connectTimeout = connectTimeout;
         this.responseTimeout = responseTimeout;
+        this.connectionKeepAlive = connectionKeepAlive;
         this.contentCompressionEnabled = contentCompressionEnabled;
         this.hardCancellationEnabled = hardCancellationEnabled;
     }
 
     /**
-     * Determines whether the 'Expect: 100-Continue' handshake is enabled
-     * for entity enclosing methods. The purpose of the 'Expect: 100-Continue'
-     * handshake is to allow a client that is sending a request message with
-     * a request body to determine if the origin server is willing to
-     * accept the request (based on the request headers) before the client
-     * sends the request body.
-     * <p>
-     * The use of the 'Expect: 100-continue' handshake can result in
-     * a noticeable performance improvement for entity enclosing requests
-     * (such as POST and PUT) that require the target server's
-     * authentication.
-     * </p>
-     * <p>
-     * 'Expect: 100-continue' handshake should be used with caution, as it
-     * may cause problems with HTTP servers and proxies that do not support
-     * HTTP/1.1 protocol.
-     * </p>
-     * <p>
-     * Default: {@code false}
-     * </p>
+     * @see Builder#setExpectContinueEnabled(boolean)
      */
     public boolean isExpectContinueEnabled() {
         return expectContinueEnabled;
     }
 
     /**
-     * Returns HTTP proxy to be used for request execution.
-     * <p>
-     * Default: {@code null}
-     * </p>
+     * @see Builder#setProxy(HttpHost)
+     *
+     * @deprecated Use {@link org.apache.hc.client5.http.impl.routing.DefaultProxyRoutePlanner}
+     * or a custom {@link org.apache.hc.client5.http.routing.HttpRoutePlanner}.
      */
+    @Deprecated
     public HttpHost getProxy() {
         return proxy;
     }
 
     /**
-     * Determines the name of the cookie specification to be used for HTTP state
-     * management.
-     * <p>
-     * Default: {@code null}
-     * </p>
+     * @see Builder#setCookieSpec(String)
      */
     public String getCookieSpec() {
         return cookieSpec;
     }
 
     /**
-     * Determines whether redirects should be handled automatically.
-     * <p>
-     * Default: {@code true}
-     * </p>
+     * @see Builder#setRedirectsEnabled(boolean)
      */
     public boolean isRedirectsEnabled() {
         return redirectsEnabled;
     }
 
     /**
-     * Determines whether circular redirects (redirects to the same location) should
-     * be allowed. The HTTP spec is not sufficiently clear whether circular redirects
-     * are permitted, therefore optionally they can be enabled
-     * <p>
-     * Default: {@code false}
-     * </p>
+     * @see Builder#setCircularRedirectsAllowed(boolean)
      */
     public boolean isCircularRedirectsAllowed() {
         return circularRedirectsAllowed;
     }
 
     /**
-     * Returns the maximum number of redirects to be followed. The limit on number
-     * of redirects is intended to prevent infinite loops.
-     * <p>
-     * Default: {@code 50}
-     * </p>
+     * @see Builder#setMaxRedirects(int)
      */
     public int getMaxRedirects() {
         return maxRedirects;
     }
 
     /**
-     * Determines whether authentication should be handled automatically.
-     * <p>
-     * Default: {@code true}
-     * </p>
+     * @see Builder#setAuthenticationEnabled(boolean)
      */
     public boolean isAuthenticationEnabled() {
         return authenticationEnabled;
     }
 
     /**
-     * Determines the order of preference for supported authentication schemes
-     * when authenticating with the target host.
-     * <p>
-     * Default: {@code null}
-     * </p>
+     * @see Builder#setTargetPreferredAuthSchemes(Collection)
      */
     public Collection<String> getTargetPreferredAuthSchemes() {
         return targetPreferredAuthSchemes;
     }
 
     /**
-     * Determines the order of preference for supported authentication schemes
-     * when authenticating with the proxy host.
-     * <p>
-     * Default: {@code null}
-     * </p>
+     * @see Builder#setProxyPreferredAuthSchemes(Collection)
      */
     public Collection<String> getProxyPreferredAuthSchemes() {
         return proxyPreferredAuthSchemes;
     }
 
     /**
-     * Returns the connection lease request timeout used when requesting
-     * a connection from the connection manager.
-     * <p>
-     * A timeout value of zero is interpreted as an infinite timeout.
-     * </p>
-     * <p>
-     * Default: 3 minutes.
-     * </p>
+     * @see Builder#setConnectionRequestTimeout(Timeout)
      */
     public Timeout getConnectionRequestTimeout() {
         return connectionRequestTimeout;
     }
 
     /**
-     * Determines the timeout until a new connection is fully established.
-     * This may also include transport security negotiation exchanges
-     * such as {@code SSL} or {@code TLS} protocol negotiation).
-     * <p>
-     * A timeout value of zero is interpreted as an infinite timeout.
-     * </p>
-     * <p>
-     * Default: 3 minutes
-     * </p>
+     * @see Builder#setConnectTimeout(Timeout)
+     *
+     * @deprecated Use {@link ConnectionConfig#getConnectTimeout()}.
      */
+    @Deprecated
     public Timeout getConnectTimeout() {
         return connectTimeout;
     }
 
     /**
-     * Determines the timeout until arrival of a response from the opposite
-     * endpoint.
-     * <p>
-     * A timeout value of zero is interpreted as an infinite timeout.
-     * </p>
-     * <p>
-     * Please note that response timeout may be unsupported by
-     * HTTP transports with message multiplexing.
-     * </p>
-     * <p>
-     * Default: {@code null}
-     * </p>
-     *
-     * @since 5.0
+     * @see Builder#setResponseTimeout(Timeout)
      */
     public Timeout getResponseTimeout() {
         return responseTimeout;
     }
 
     /**
-     * Determines whether the target server is requested to compress content.
-     * <p>
-     * Default: {@code true}
-     * </p>
-     *
-     * @since 4.5
+     * @see Builder#setConnectionKeepAlive(TimeValue)
+     */
+    public TimeValue getConnectionKeepAlive() {
+        return connectionKeepAlive;
+    }
+
+    /**
+     * @see Builder#setContentCompressionEnabled(boolean)
      */
     public boolean isContentCompressionEnabled() {
         return contentCompressionEnabled;
     }
 
     /**
-     * Determines whether request cancellation, such as through {@code
-     * Future#cancel(boolean)}, should kill the underlying connection. If this
-     * option is set to false, the client will attempt to preserve the
-     * underlying connection by allowing the request to complete in the
-     * background, discarding the response.
-     * <p>
-     * Note that when this option is {@code true}, cancelling a request may
-     * cause other requests to fail, if they are waiting to use the same
-     * connection.
-     * </p>
-     * <p>
-     * On HTTP/2, this option has no effect. Request cancellation will always
-     * result in the stream being cancelled with a {@code RST_STREAM}. This
-     * has no effect on connection reuse.
-     * </p>
-     * <p>
-     * On non-asynchronous clients, this option has no effect. Request
-     * cancellation, such as through {@code HttpUriRequestBase#cancel()}, will
-     * always kill the underlying connection.
-     * </p>
-     * <p>
-     * Default: {@code true}
-     * </p>
-     *
-     * @since 5.0
+     * @see Builder#setHardCancellationEnabled(boolean)
      */
     public boolean isHardCancellationEnabled() {
         return hardCancellationEnabled;
@@ -325,6 +237,8 @@ public class RequestConfig implements Cloneable {
         builder.append(", proxyPreferredAuthSchemes=").append(proxyPreferredAuthSchemes);
         builder.append(", connectionRequestTimeout=").append(connectionRequestTimeout);
         builder.append(", connectTimeout=").append(connectTimeout);
+        builder.append(", responseTimeout=").append(responseTimeout);
+        builder.append(", connectionKeepAlive=").append(connectionKeepAlive);
         builder.append(", contentCompressionEnabled=").append(contentCompressionEnabled);
         builder.append(", hardCancellationEnabled=").append(hardCancellationEnabled);
         builder.append("]");
@@ -348,6 +262,8 @@ public class RequestConfig implements Cloneable {
             .setProxyPreferredAuthSchemes(config.getProxyPreferredAuthSchemes())
             .setConnectionRequestTimeout(config.getConnectionRequestTimeout())
             .setConnectTimeout(config.getConnectTimeout())
+            .setResponseTimeout(config.getResponseTimeout())
+            .setConnectionKeepAlive(config.getConnectionKeepAlive())
             .setContentCompressionEnabled(config.isContentCompressionEnabled())
             .setHardCancellationEnabled(config.isHardCancellationEnabled());
     }
@@ -366,6 +282,7 @@ public class RequestConfig implements Cloneable {
         private Timeout connectionRequestTimeout;
         private Timeout connectTimeout;
         private Timeout responseTimeout;
+        private TimeValue connectionKeepAlive;
         private boolean contentCompressionEnabled;
         private boolean hardCancellationEnabled;
 
@@ -375,91 +292,282 @@ public class RequestConfig implements Cloneable {
             this.maxRedirects = 50;
             this.authenticationEnabled = true;
             this.connectionRequestTimeout = DEFAULT_CONNECTION_REQUEST_TIMEOUT;
-            this.connectTimeout = DEFAULT_CONNECT_TIMEOUT;
             this.contentCompressionEnabled = true;
             this.hardCancellationEnabled = true;
         }
 
+        /**
+         * Determines whether the 'Expect: 100-Continue' handshake is enabled
+         * for entity enclosing methods. The purpose of the 'Expect: 100-Continue'
+         * handshake is to allow a client that is sending a request message with
+         * a request body to determine if the origin server is willing to
+         * accept the request (based on the request headers) before the client
+         * sends the request body.
+         * <p>
+         * The use of the 'Expect: 100-continue' handshake can result in
+         * a noticeable performance improvement for entity enclosing requests
+         * (such as POST and PUT) that require the target server's
+         * authentication.
+         * </p>
+         * <p>
+         * 'Expect: 100-continue' handshake should be used with caution, as it
+         * may cause problems with HTTP servers and proxies that do not support
+         * HTTP/1.1 protocol.
+         * </p>
+         * <p>
+         * Default: {@code false}
+         * </p>
+         */
         public Builder setExpectContinueEnabled(final boolean expectContinueEnabled) {
             this.expectContinueEnabled = expectContinueEnabled;
             return this;
         }
 
+        /**
+         * Returns HTTP proxy to be used for request execution.
+         * <p>
+         * Default: {@code null}
+         * </p>
+         *
+         * @deprecated Use {@link org.apache.hc.client5.http.impl.routing.DefaultProxyRoutePlanner}
+         * or a custom {@link org.apache.hc.client5.http.routing.HttpRoutePlanner}.
+         */
+        @Deprecated
         public Builder setProxy(final HttpHost proxy) {
             this.proxy = proxy;
             return this;
         }
 
+        /**
+         * Determines the name of the cookie specification to be used for HTTP state
+         * management.
+         * <p>
+         * Default: {@code null}
+         * </p>
+         */
         public Builder setCookieSpec(final String cookieSpec) {
             this.cookieSpec = cookieSpec;
             return this;
         }
 
+        /**
+         * Determines whether redirects should be handled automatically.
+         * <p>
+         * Default: {@code true}
+         * </p>
+         */
         public Builder setRedirectsEnabled(final boolean redirectsEnabled) {
             this.redirectsEnabled = redirectsEnabled;
             return this;
         }
 
+        /**
+         * Determines whether circular redirects (redirects to the same location) should
+         * be allowed. The HTTP spec is not sufficiently clear whether circular redirects
+         * are permitted, therefore optionally they can be enabled
+         * <p>
+         * Default: {@code false}
+         * </p>
+         */
         public Builder setCircularRedirectsAllowed(final boolean circularRedirectsAllowed) {
             this.circularRedirectsAllowed = circularRedirectsAllowed;
             return this;
         }
 
+        /**
+         * Returns the maximum number of redirects to be followed. The limit on number
+         * of redirects is intended to prevent infinite loops.
+         * <p>
+         * Default: {@code 50}
+         * </p>
+         */
         public Builder setMaxRedirects(final int maxRedirects) {
             this.maxRedirects = maxRedirects;
             return this;
         }
 
+        /**
+         * Determines whether authentication should be handled automatically.
+         * <p>
+         * Default: {@code true}
+         * </p>
+         */
         public Builder setAuthenticationEnabled(final boolean authenticationEnabled) {
             this.authenticationEnabled = authenticationEnabled;
             return this;
         }
 
+        /**
+         * Determines the order of preference for supported authentication schemes
+         * by their names when authenticating with the target host.
+         * <p>
+         * Default: {@code null}
+         * </p>
+         */
         public Builder setTargetPreferredAuthSchemes(final Collection<String> targetPreferredAuthSchemes) {
             this.targetPreferredAuthSchemes = targetPreferredAuthSchemes;
             return this;
         }
 
+        /**
+         * Determines the order of preference for supported authentication schemes
+         * by their names when authenticating with the proxy host.
+         * <p>
+         * Default: {@code null}
+         * </p>
+         */
         public Builder setProxyPreferredAuthSchemes(final Collection<String> proxyPreferredAuthSchemes) {
             this.proxyPreferredAuthSchemes = proxyPreferredAuthSchemes;
             return this;
         }
-
+        /**
+         * Returns the connection lease request timeout used when requesting
+         * a connection from the connection manager.
+         * <p>
+         * A timeout value of zero is interpreted as an infinite timeout.
+         * </p>
+         * <p>
+         * Default: 3 minutes.
+         * </p>
+         */
         public Builder setConnectionRequestTimeout(final Timeout connectionRequestTimeout) {
             this.connectionRequestTimeout = connectionRequestTimeout;
             return this;
         }
 
+        /**
+         * @see #setConnectionRequestTimeout(Timeout)
+         */
         public Builder setConnectionRequestTimeout(final long connectionRequestTimeout, final TimeUnit timeUnit) {
             this.connectionRequestTimeout = Timeout.of(connectionRequestTimeout, timeUnit);
             return this;
         }
 
+        /**
+         * Determines the timeout until a new connection is fully established.
+         * This may also include transport security negotiation exchanges
+         * such as {@code SSL} or {@code TLS} protocol negotiation).
+         * <p>
+         * A timeout value of zero is interpreted as an infinite timeout.
+         * </p>
+         * <p>
+         * Default: 3 minutes
+         * </p>
+         *
+         * @deprecated Use {@link ConnectionConfig.Builder#setConnectTimeout(Timeout)}.
+         */
+        @Deprecated
         public Builder setConnectTimeout(final Timeout connectTimeout) {
             this.connectTimeout = connectTimeout;
             return this;
         }
 
+        /**
+         * @see #setConnectTimeout(Timeout)
+         *
+         * @deprecated Use {@link ConnectionConfig.Builder#setConnectTimeout(long, TimeUnit)}.
+         */
+        @Deprecated
         public Builder setConnectTimeout(final long connectTimeout, final TimeUnit timeUnit) {
             this.connectTimeout = Timeout.of(connectTimeout, timeUnit);
             return this;
         }
 
+        /**
+         * Determines the timeout until arrival of a response from the opposite
+         * endpoint.
+         * <p>
+         * A timeout value of zero is interpreted as an infinite timeout.
+         * </p>
+         * <p>
+         * Please note that response timeout may be unsupported by
+         * HTTP transports with message multiplexing.
+         * </p>
+         * <p>
+         * Default: {@code null}
+         * </p>
+         *
+         * @since 5.0
+         */
         public Builder setResponseTimeout(final Timeout responseTimeout) {
             this.responseTimeout = responseTimeout;
             return this;
         }
 
+        /**
+         * @see #setResponseTimeout(Timeout)
+         */
         public Builder setResponseTimeout(final long responseTimeout, final TimeUnit timeUnit) {
             this.responseTimeout = Timeout.of(responseTimeout, timeUnit);
             return this;
         }
 
+        /**
+         * Determines the default of value of connection keep-alive time period when not
+         * explicitly communicated by the origin server with a {@code Keep-Alive} response
+         * header.
+         * <p>
+         * A negative value is interpreted as an infinite keep-alive period.
+         * </p>
+         * <p>
+         * Default: 3 minutes
+         * </p>
+         *
+         * @since 5.0
+         */
+        public Builder setConnectionKeepAlive(final TimeValue connectionKeepAlive) {
+            this.connectionKeepAlive = connectionKeepAlive;
+            return this;
+        }
+
+        /**
+         * @see #setConnectionKeepAlive(TimeValue)
+         */
+        public Builder setDefaultKeepAlive(final long defaultKeepAlive, final TimeUnit timeUnit) {
+            this.connectionKeepAlive = TimeValue.of(defaultKeepAlive, timeUnit);
+            return this;
+        }
+
+        /**
+         * Determines whether the target server is requested to compress content.
+         * <p>
+         * Default: {@code true}
+         * </p>
+         *
+         * @since 4.5
+         */
         public Builder setContentCompressionEnabled(final boolean contentCompressionEnabled) {
             this.contentCompressionEnabled = contentCompressionEnabled;
             return this;
         }
 
+        /**
+         * Determines whether request cancellation, such as through {@code
+         * Future#cancel(boolean)}, should kill the underlying connection. If this
+         * option is set to false, the client will attempt to preserve the
+         * underlying connection by allowing the request to complete in the
+         * background, discarding the response.
+         * <p>
+         * Note that when this option is {@code true}, cancelling a request may
+         * cause other requests to fail, if they are waiting to use the same
+         * connection.
+         * </p>
+         * <p>
+         * On HTTP/2, this option has no effect. Request cancellation will always
+         * result in the stream being cancelled with a {@code RST_STREAM}. This
+         * has no effect on connection reuse.
+         * </p>
+         * <p>
+         * On non-asynchronous clients, this option has no effect. Request
+         * cancellation, such as through {@code HttpUriRequestBase#cancel()}, will
+         * always kill the underlying connection.
+         * </p>
+         * <p>
+         * Default: {@code true}
+         * </p>
+         *
+         * @since 5.0
+         */
         public Builder setHardCancellationEnabled(final boolean hardCancellationEnabled) {
             this.hardCancellationEnabled = hardCancellationEnabled;
             return this;
@@ -477,8 +585,9 @@ public class RequestConfig implements Cloneable {
                     targetPreferredAuthSchemes,
                     proxyPreferredAuthSchemes,
                     connectionRequestTimeout != null ? connectionRequestTimeout : DEFAULT_CONNECTION_REQUEST_TIMEOUT,
-                    connectTimeout != null ? connectTimeout : DEFAULT_CONNECT_TIMEOUT,
+                    connectTimeout,
                     responseTimeout,
+                    connectionKeepAlive != null ? connectionKeepAlive : DEFAULT_CONN_KEEP_ALIVE,
                     contentCompressionEnabled,
                     hardCancellationEnabled);
         }

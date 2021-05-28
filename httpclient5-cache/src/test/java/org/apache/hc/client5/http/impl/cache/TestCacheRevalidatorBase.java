@@ -40,6 +40,7 @@ import org.apache.hc.core5.http.message.BasicHttpResponse;
 import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
 import org.hamcrest.CoreMatchers;
+import org.hamcrest.MatcherAssert;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -87,7 +88,7 @@ public class TestCacheRevalidatorBase {
         impl.scheduleRevalidation(cacheKey, mockOperation);
 
         verify(mockSchedulingStrategy).schedule(0);
-        verify(mockScheduledExecutor).schedule(ArgumentMatchers.<Runnable>any(), ArgumentMatchers.eq(TimeValue.ofSeconds(3)));
+        verify(mockScheduledExecutor).schedule(ArgumentMatchers.any(), ArgumentMatchers.eq(TimeValue.ofSeconds(3)));
 
         Assert.assertEquals(1, impl.getScheduledIdentifiers().size());
         Assert.assertTrue(impl.getScheduledIdentifiers().contains(cacheKey));
@@ -100,13 +101,13 @@ public class TestCacheRevalidatorBase {
     @Test
     public void testRevalidateCacheEntryDoesNotPopulateIdentifierOnRejectedExecutionException() {
         when(mockSchedulingStrategy.schedule(ArgumentMatchers.anyInt())).thenReturn(TimeValue.ofSeconds(2));
-        doThrow(new RejectedExecutionException()).when(mockScheduledExecutor).schedule(ArgumentMatchers.<Runnable>any(), ArgumentMatchers.<TimeValue>any());
+        doThrow(new RejectedExecutionException()).when(mockScheduledExecutor).schedule(ArgumentMatchers.any(), ArgumentMatchers.any());
 
         final String cacheKey = "blah";
         impl.scheduleRevalidation(cacheKey, mockOperation);
 
         Assert.assertEquals(0, impl.getScheduledIdentifiers().size());
-        verify(mockScheduledExecutor).schedule(ArgumentMatchers.<Runnable>any(), ArgumentMatchers.eq(TimeValue.ofSeconds(2)));
+        verify(mockScheduledExecutor).schedule(ArgumentMatchers.any(), ArgumentMatchers.eq(TimeValue.ofSeconds(2)));
     }
 
     @Test
@@ -119,7 +120,7 @@ public class TestCacheRevalidatorBase {
         impl.scheduleRevalidation(cacheKey, mockOperation);
 
         verify(mockSchedulingStrategy).schedule(ArgumentMatchers.anyInt());
-        verify(mockScheduledExecutor).schedule(ArgumentMatchers.<Runnable>any(), ArgumentMatchers.eq(TimeValue.ofSeconds(2)));
+        verify(mockScheduledExecutor).schedule(ArgumentMatchers.any(), ArgumentMatchers.eq(TimeValue.ofSeconds(2)));
 
         Assert.assertEquals(1, impl.getScheduledIdentifiers().size());
     }
@@ -128,18 +129,18 @@ public class TestCacheRevalidatorBase {
     public void testStaleResponse() {
         final HttpResponse response1 = new BasicHttpResponse(HttpStatus.SC_OK);
         response1.addHeader(HeaderConstants.WARNING, "110 localhost \"Response is stale\"");
-        Assert.assertThat(impl.isStale(response1), CoreMatchers.equalTo(true));
+        MatcherAssert.assertThat(impl.isStale(response1), CoreMatchers.equalTo(true));
 
         final HttpResponse response2 = new BasicHttpResponse(HttpStatus.SC_OK);
         response2.addHeader(HeaderConstants.WARNING, "111 localhost \"Revalidation failed\"");
-        Assert.assertThat(impl.isStale(response2), CoreMatchers.equalTo(true));
+        MatcherAssert.assertThat(impl.isStale(response2), CoreMatchers.equalTo(true));
 
         final HttpResponse response3 = new BasicHttpResponse(HttpStatus.SC_OK);
         response3.addHeader(HeaderConstants.WARNING, "xxx localhost \"Huh?\"");
-        Assert.assertThat(impl.isStale(response3), CoreMatchers.equalTo(false));
+        MatcherAssert.assertThat(impl.isStale(response3), CoreMatchers.equalTo(false));
 
         final HttpResponse response4 = new BasicHttpResponse(HttpStatus.SC_OK);
-        Assert.assertThat(impl.isStale(response4), CoreMatchers.equalTo(false));
+        MatcherAssert.assertThat(impl.isStale(response4), CoreMatchers.equalTo(false));
     }
 
     @Test

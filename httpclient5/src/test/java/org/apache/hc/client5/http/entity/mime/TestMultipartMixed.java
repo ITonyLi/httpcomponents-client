@@ -62,7 +62,7 @@ public class TestMultipartMixed {
         final MultipartPart p3 = MultipartPartBuilder.create(
                 new StringBody("all kind of stuff", ContentType.DEFAULT_TEXT)).build();
         final HttpStrictMultipart multipart = new HttpStrictMultipart(null, "foo",
-                Arrays.<MultipartPart>asList(p1, p2, p3));
+                Arrays.asList(p1, p2, p3));
 
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         multipart.writeTo(out);
@@ -94,7 +94,7 @@ public class TestMultipartMixed {
         final MultipartPart p2 = MultipartPartBuilder.create(
                 new StringBody("that stuff", ContentType.parse("stuff/plain; param=value"))).build();
         final HttpStrictMultipart multipart = new HttpStrictMultipart(null, "foo",
-                Arrays.<MultipartPart>asList(p1, p2));
+                Arrays.asList(p1, p2));
 
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         multipart.writeTo(out);
@@ -128,7 +128,7 @@ public class TestMultipartMixed {
         final MultipartPart p2 = MultipartPartBuilder.create(
                 new InputStreamBody(new FileInputStream(tmpfile), "file.tmp")).build();
         final HttpStrictMultipart multipart = new HttpStrictMultipart(null, "foo",
-                Arrays.<MultipartPart>asList(p1, p2));
+                Arrays.asList(p1, p2));
 
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         multipart.writeTo(out);
@@ -164,7 +164,7 @@ public class TestMultipartMixed {
         final MultipartPart p3 = MultipartPartBuilder.create(
                 new InputStreamBody(new FileInputStream(tmpfile), "file.tmp")).build();
         final HttpStrictMultipart multipart = new HttpStrictMultipart(null, "foo",
-                Arrays.<MultipartPart>asList(p1, p2, p3));
+                Arrays.asList(p1, p2, p3));
 
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         multipart.writeTo(out);
@@ -204,7 +204,7 @@ public class TestMultipartMixed {
         final MultipartPart p3 = MultipartPartBuilder.create(
                 new InputStreamBody(new FileInputStream(tmpfile), "file.tmp")).build();
         final HttpRFC6532Multipart multipart = new HttpRFC6532Multipart(null, "foo",
-                Arrays.<MultipartPart>asList(p1, p2, p3));
+                Arrays.asList(p1, p2, p3));
 
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         multipart.writeTo(out);
@@ -264,9 +264,9 @@ public class TestMultipartMixed {
         @SuppressWarnings("resource")
         final MultipartPart p2 = MultipartPartBuilder.create(
                 new InputStreamBody(new FileInputStream(tmpfile), s2 + ".tmp")).build();
-        final HttpBrowserCompatibleMultipart multipart = new HttpBrowserCompatibleMultipart(
+        final LegacyMultipart multipart = new LegacyMultipart(
                 StandardCharsets.UTF_8, "foo",
-                Arrays.<MultipartPart>asList(p1, p2));
+                Arrays.asList(p1, p2));
 
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         multipart.writeTo(out);
@@ -293,11 +293,11 @@ public class TestMultipartMixed {
         final String s2 = constructString(RUSSIAN_HELLO);
 
         final MultipartPart p1 = MultipartPartBuilder.create(
-                new StringBody(s1, ContentType.create("text/plain", Charset.forName("ISO-8859-1")))).build();
+                new StringBody(s1, ContentType.create("text/plain", StandardCharsets.ISO_8859_1))).build();
         final MultipartPart p2 = MultipartPartBuilder.create(
                 new StringBody(s2, ContentType.create("text/plain", Charset.forName("KOI8-R")))).build();
         final HttpStrictMultipart multipart = new HttpStrictMultipart(null, "foo",
-                Arrays.<MultipartPart>asList(p1, p2));
+                Arrays.asList(p1, p2));
 
         final ByteArrayOutputStream out1 = new ByteArrayOutputStream();
         multipart.writeTo(out1);

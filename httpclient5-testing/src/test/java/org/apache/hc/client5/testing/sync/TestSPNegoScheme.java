@@ -31,12 +31,12 @@ import java.security.Principal;
 
 import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.auth.AuthScheme;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
 import org.apache.hc.client5.http.auth.AuthScope;
 import org.apache.hc.client5.http.auth.Credentials;
 import org.apache.hc.client5.http.auth.KerberosConfig;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.auth.AuthSchemes;
 import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
 import org.apache.hc.client5.http.impl.auth.SPNegoScheme;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
@@ -53,10 +53,8 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.apache.hc.core5.http.protocol.HttpContext;
 import org.ietf.jgss.GSSContext;
-import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSManager;
 import org.ietf.jgss.GSSName;
-import org.ietf.jgss.Oid;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.ArgumentMatchers;
@@ -78,7 +76,7 @@ public class TestSPNegoScheme extends LocalServerTestBase {
                 final ClassicHttpResponse response,
                 final HttpContext context) throws HttpException, IOException {
             response.setCode(HttpStatus.SC_UNAUTHORIZED);
-            response.addHeader(new BasicHeader("WWW-Authenticate", "Negotiate blablabla"));
+            response.addHeader(new BasicHeader("WWW-Authenticate", StandardAuthScheme.SPNEGO + " blablabla"));
             response.addHeader(new BasicHeader("Connection", "Keep-Alive"));
             response.setEntity(new StringEntity("auth required "));
         }
@@ -91,21 +89,21 @@ public class TestSPNegoScheme extends LocalServerTestBase {
      */
     private static class NegotiateSchemeWithMockGssManager extends SPNegoScheme {
 
-        GSSManager manager = Mockito.mock(GSSManager.class);
-        GSSName name = Mockito.mock(GSSName.class);
-        GSSContext context = Mockito.mock(GSSContext.class);
+        final GSSManager manager = Mockito.mock(GSSManager.class);
+        final GSSName name = Mockito.mock(GSSName.class);
+        final GSSContext context = Mockito.mock(GSSContext.class);
 
         NegotiateSchemeWithMockGssManager() throws Exception {
             super(KerberosConfig.DEFAULT, SystemDefaultDnsResolver.INSTANCE);
             Mockito.when(context.initSecContext(
-                    ArgumentMatchers.<byte[]>any(), ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt()))
+                    ArgumentMatchers.any(), ArgumentMatchers.anyInt(), ArgumentMatchers.anyInt()))
                     .thenReturn("12345678".getBytes());
             Mockito.when(manager.createName(
-                    ArgumentMatchers.anyString(), ArgumentMatchers.<Oid>any()))
+                    ArgumentMatchers.anyString(), ArgumentMatchers.any()))
                     .thenReturn(name);
             Mockito.when(manager.createContext(
-                    ArgumentMatchers.<GSSName>any(), ArgumentMatchers.<Oid>any(),
-                    ArgumentMatchers.<GSSCredential>any(), ArgumentMatchers.anyInt()))
+                    ArgumentMatchers.any(), ArgumentMatchers.any(),
+                    ArgumentMatchers.any(), ArgumentMatchers.anyInt()))
                     .thenReturn(context);
         }
 
@@ -130,11 +128,11 @@ public class TestSPNegoScheme extends LocalServerTestBase {
 
     }
 
-    private static class NegotiateSchemeProviderWithMockGssManager implements AuthSchemeProvider {
+    private static class NegotiateSchemeFactoryWithMockGssManager implements AuthSchemeFactory {
 
         NegotiateSchemeWithMockGssManager scheme;
 
-        NegotiateSchemeProviderWithMockGssManager() throws Exception {
+        NegotiateSchemeFactoryWithMockGssManager() throws Exception {
             scheme = new NegotiateSchemeWithMockGssManager();
         }
 
@@ -154,13 +152,13 @@ public class TestSPNegoScheme extends LocalServerTestBase {
         this.server.registerHandler("*", new PleaseNegotiateService());
         final HttpHost target = start();
 
-        final AuthSchemeProvider nsf = new NegotiateSchemeProviderWithMockGssManager();
+        final AuthSchemeFactory nsf = new NegotiateSchemeFactoryWithMockGssManager();
         final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
         final Credentials use_jaas_creds = new UseJaasCredentials();
         credentialsProvider.setCredentials(new AuthScope(null, null, -1, null, null), use_jaas_creds);
 
-        final Registry<AuthSchemeProvider> authSchemeRegistry = RegistryBuilder.<AuthSchemeProvider>create()
-            .register(AuthSchemes.SPNEGO.ident, nsf)
+        final Registry<AuthSchemeFactory> authSchemeRegistry = RegistryBuilder.<AuthSchemeFactory>create()
+            .register(StandardAuthScheme.SPNEGO, nsf)
             .build();
         this.httpclient = HttpClients.custom()
             .setDefaultAuthSchemeRegistry(authSchemeRegistry)
@@ -184,14 +182,14 @@ public class TestSPNegoScheme extends LocalServerTestBase {
         this.server.registerHandler("*", new PleaseNegotiateService());
         final HttpHost target = start();
 
-        final AuthSchemeProvider nsf = new NegotiateSchemeProviderWithMockGssManager();
+        final AuthSchemeFactory nsf = new NegotiateSchemeFactoryWithMockGssManager();
 
         final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
         final Credentials use_jaas_creds = new UseJaasCredentials();
         credentialsProvider.setCredentials(new AuthScope(null, null, -1, null, null), use_jaas_creds);
 
-        final Registry<AuthSchemeProvider> authSchemeRegistry = RegistryBuilder.<AuthSchemeProvider>create()
-            .register(AuthSchemes.SPNEGO.ident, nsf)
+        final Registry<AuthSchemeFactory> authSchemeRegistry = RegistryBuilder.<AuthSchemeFactory>create()
+            .register(StandardAuthScheme.SPNEGO, nsf)
             .build();
         this.httpclient = HttpClients.custom()
             .setDefaultAuthSchemeRegistry(authSchemeRegistry)

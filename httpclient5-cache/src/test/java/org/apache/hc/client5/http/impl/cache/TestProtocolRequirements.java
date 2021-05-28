@@ -29,6 +29,7 @@ package org.apache.hc.client5.http.impl.cache;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketTimeoutException;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.Random;
@@ -37,6 +38,7 @@ import java.util.regex.Pattern;
 
 import org.apache.hc.client5.http.ClientProtocolException;
 import org.apache.hc.client5.http.HttpRoute;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.cache.HttpCacheEntry;
 import org.apache.hc.client5.http.classic.ExecChain;
 import org.apache.hc.client5.http.utils.DateUtils;
@@ -1379,9 +1381,7 @@ public class TestProtocolRequirements extends AbstractProtocolTest {
         resp1.setHeader("Cache-Control", "max-age=3600");
         resp1.setHeader("ETag", "\"etag1\"");
         final byte[] bytes1 = new byte[128];
-        for (int i = 0; i < bytes1.length; i++) {
-            bytes1[i] = (byte) 1;
-        }
+        Arrays.fill(bytes1, (byte) 1);
         resp1.setEntity(new ByteArrayEntity(bytes1, null));
 
         final ClassicHttpRequest req2 = new BasicClassicHttpRequest("GET", "/");
@@ -1396,9 +1396,7 @@ public class TestProtocolRequirements extends AbstractProtocolTest {
         resp2.setHeader("ETag", "\"etag2\"");
         resp2.setHeader("Content-Range", "bytes 0-50/128");
         final byte[] bytes2 = new byte[51];
-        for (int i = 0; i < bytes2.length; i++) {
-            bytes2[i] = (byte) 2;
-        }
+        Arrays.fill(bytes2, (byte) 2);
         resp2.setEntity(new ByteArrayEntity(bytes2, null));
 
         final Date inTwoSeconds = new Date(now.getTime() + 2000L);
@@ -1408,9 +1406,7 @@ public class TestProtocolRequirements extends AbstractProtocolTest {
         resp3.setHeader("Cache-Control", "max-age=3600");
         resp3.setHeader("ETag", "\"etag2\"");
         final byte[] bytes3 = new byte[128];
-        for (int i = 0; i < bytes3.length; i++) {
-            bytes3[i] = (byte) 2;
-        }
+        Arrays.fill(bytes3, (byte) 2);
         resp3.setEntity(new ByteArrayEntity(bytes3, null));
 
         EasyMock.expect(
@@ -1460,9 +1456,7 @@ public class TestProtocolRequirements extends AbstractProtocolTest {
         resp1.setHeader("Cache-Control", "max-age=3600");
         resp1.setHeader("Last-Modified", DateUtils.formatDate(oneHourAgo));
         final byte[] bytes1 = new byte[128];
-        for (int i = 0; i < bytes1.length; i++) {
-            bytes1[i] = (byte) 1;
-        }
+        Arrays.fill(bytes1, (byte) 1);
         resp1.setEntity(new ByteArrayEntity(bytes1, null));
 
         final ClassicHttpRequest req2 = new BasicClassicHttpRequest("GET", "/");
@@ -1477,9 +1471,7 @@ public class TestProtocolRequirements extends AbstractProtocolTest {
         resp2.setHeader("Last-Modified", DateUtils.formatDate(now));
         resp2.setHeader("Content-Range", "bytes 0-50/128");
         final byte[] bytes2 = new byte[51];
-        for (int i = 0; i < bytes2.length; i++) {
-            bytes2[i] = (byte) 2;
-        }
+        Arrays.fill(bytes2, (byte) 2);
         resp2.setEntity(new ByteArrayEntity(bytes2, null));
 
         final Date inTwoSeconds = new Date(now.getTime() + 2000L);
@@ -1489,9 +1481,7 @@ public class TestProtocolRequirements extends AbstractProtocolTest {
         resp3.setHeader("Cache-Control", "max-age=3600");
         resp3.setHeader("ETag", "\"etag2\"");
         final byte[] bytes3 = new byte[128];
-        for (int i = 0; i < bytes3.length; i++) {
-            bytes3[i] = (byte) 2;
-        }
+        Arrays.fill(bytes3, (byte) 2);
         resp3.setEntity(new ByteArrayEntity(bytes3, null));
 
         EasyMock.expect(
@@ -4520,7 +4510,7 @@ public class TestProtocolRequirements extends AbstractProtocolTest {
     protected void testSharedCacheRevalidatesAuthorizedResponse(
             final ClassicHttpResponse authorizedResponse, final int minTimes, final int maxTimes) throws Exception {
         if (config.isSharedCache()) {
-            final String authorization = "Basic dXNlcjpwYXNzd2Q=";
+            final String authorization = StandardAuthScheme.BASIC + " dXNlcjpwYXNzd2Q=";
             final ClassicHttpRequest req1 = new BasicClassicHttpRequest("GET", "/");
             req1.setHeader("Authorization",authorization);
 
@@ -4584,8 +4574,8 @@ public class TestProtocolRequirements extends AbstractProtocolTest {
     protected void testSharedCacheMustUseNewRequestHeadersWhenRevalidatingAuthorizedResponse(
             final ClassicHttpResponse authorizedResponse) throws Exception {
         if (config.isSharedCache()) {
-            final String authorization1 = "Basic dXNlcjpwYXNzd2Q=";
-            final String authorization2 = "Basic dXNlcjpwYXNzd2Qy";
+            final String authorization1 = StandardAuthScheme.BASIC + " dXNlcjpwYXNzd2Q=";
+            final String authorization2 = StandardAuthScheme.BASIC + " dXNlcjpwYXNzd2Qy";
 
             final ClassicHttpRequest req1 = new BasicClassicHttpRequest("GET", "/");
             req1.setHeader("Authorization",authorization1);

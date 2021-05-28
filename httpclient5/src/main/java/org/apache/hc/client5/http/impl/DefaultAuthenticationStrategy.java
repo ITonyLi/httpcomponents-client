@@ -38,8 +38,8 @@ import java.util.Map;
 import org.apache.hc.client5.http.AuthenticationStrategy;
 import org.apache.hc.client5.http.auth.AuthChallenge;
 import org.apache.hc.client5.http.auth.AuthScheme;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
-import org.apache.hc.client5.http.auth.AuthSchemes;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.auth.ChallengeType;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
@@ -59,17 +59,17 @@ import org.slf4j.LoggerFactory;
 @Contract(threading = ThreadingBehavior.STATELESS)
 public class DefaultAuthenticationStrategy implements AuthenticationStrategy {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultAuthenticationStrategy.class);
 
     public static final DefaultAuthenticationStrategy INSTANCE = new DefaultAuthenticationStrategy();
 
     private static final List<String> DEFAULT_SCHEME_PRIORITY =
         Collections.unmodifiableList(Arrays.asList(
-                AuthSchemes.SPNEGO.ident,
-                AuthSchemes.KERBEROS.ident,
-                AuthSchemes.NTLM.ident,
-                AuthSchemes.DIGEST.ident,
-                AuthSchemes.BASIC.ident));
+                StandardAuthScheme.SPNEGO,
+                StandardAuthScheme.KERBEROS,
+                StandardAuthScheme.NTLM,
+                StandardAuthScheme.DIGEST,
+                StandardAuthScheme.BASIC));
 
     @Override
     public List<AuthScheme> select(
@@ -80,11 +80,14 @@ public class DefaultAuthenticationStrategy implements AuthenticationStrategy {
         Args.notNull(challenges, "Map of auth challenges");
         Args.notNull(context, "HTTP context");
         final HttpClientContext clientContext = HttpClientContext.adapt(context);
+        final String exchangeId = clientContext.getExchangeId();
 
         final List<AuthScheme> options = new ArrayList<>();
-        final Lookup<AuthSchemeProvider> registry = clientContext.getAuthSchemeRegistry();
+        final Lookup<AuthSchemeFactory> registry = clientContext.getAuthSchemeRegistry();
         if (registry == null) {
-            this.log.debug("Auth scheme registry not set in the context");
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Auth scheme registry not set in the context", exchangeId);
+            }
             return options;
         }
         final RequestConfig config = clientContext.getRequestConfig();
@@ -93,26 +96,28 @@ public class DefaultAuthenticationStrategy implements AuthenticationStrategy {
         if (authPrefs == null) {
             authPrefs = DEFAULT_SCHEME_PRIORITY;
         }
-        if (this.log.isDebugEnabled()) {
-            this.log.debug("Authentication schemes in the order of preference: " + authPrefs);
+        if (LOG.isDebugEnabled()) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Authentication schemes in the order of preference: {}", exchangeId, authPrefs);
+            }
         }
 
-        for (final String id: authPrefs) {
-            final AuthChallenge challenge = challenges.get(id.toLowerCase(Locale.ROOT));
+        for (final String schemeName: authPrefs) {
+            final AuthChallenge challenge = challenges.get(schemeName.toLowerCase(Locale.ROOT));
             if (challenge != null) {
-                final AuthSchemeProvider authSchemeProvider = registry.lookup(id);
-                if (authSchemeProvider == null) {
-                    if (this.log.isWarnEnabled()) {
-                        this.log.warn("Authentication scheme " + id + " not supported");
+                final AuthSchemeFactory authSchemeFactory = registry.lookup(schemeName);
+                if (authSchemeFactory == null) {
+                    if (LOG.isWarnEnabled()) {
+                        LOG.warn("{} Authentication scheme {} not supported", exchangeId, schemeName);
                         // Try again
                     }
                     continue;
                 }
-                final AuthScheme authScheme = authSchemeProvider.create(context);
+                final AuthScheme authScheme = authSchemeFactory.create(context);
                 options.add(authScheme);
             } else {
-                if (this.log.isDebugEnabled()) {
-                    this.log.debug("Challenge for " + id + " authentication scheme not available");
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("{}, Challenge for {} authentication scheme not available", exchangeId, schemeName);
                 }
             }
         }

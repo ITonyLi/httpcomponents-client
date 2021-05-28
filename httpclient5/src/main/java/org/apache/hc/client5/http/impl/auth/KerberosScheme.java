@@ -27,13 +27,14 @@
 package org.apache.hc.client5.http.impl.auth;
 
 import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.auth.KerberosConfig;
 import org.apache.hc.core5.annotation.Experimental;
 import org.ietf.jgss.GSSException;
 import org.ietf.jgss.Oid;
 
 /**
- * KERBEROS authentication scheme.
+ * Kerberos authentication scheme.
  * <p>
  * Please note this class is considered experimental and may be discontinued or removed
  * in the future.
@@ -59,7 +60,7 @@ public class KerberosScheme extends GGSSchemeBase {
 
     @Override
     public String getName() {
-        return "Kerberos";
+        return StandardAuthScheme.KERBEROS;
     }
 
     @Override

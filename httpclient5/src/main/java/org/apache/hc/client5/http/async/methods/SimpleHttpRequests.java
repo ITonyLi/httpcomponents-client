@@ -30,110 +30,135 @@ package org.apache.hc.client5.http.async.methods;
 import java.net.URI;
 
 import org.apache.hc.core5.http.HttpHost;
-import org.apache.hc.core5.http.Methods;
+import org.apache.hc.core5.http.Method;
 
 /**
  * Common HTTP methods using {@link SimpleHttpRequest} as a HTTP request message representation.
  *
  * @since 5.0
+ *
+ * @deprecated Use {@link SimpleRequestBuilder}.
  */
-public enum SimpleHttpRequests {
+@Deprecated
+public final class SimpleHttpRequests {
 
-    DELETE {
-        @Override
-        public SimpleHttpRequest create(final URI uri) {
-            return new SimpleHttpRequest(Methods.DELETE, uri);
-        }
+    /**
+     * Creates a new BasicHttpRequest for the given {@code method} and {@code String} URI.
+     *
+     * @param method A method supported by this class.
+     * @param uri a non-null request string URI.
+     * @return A new BasicHttpRequest.
+     */
+    public static SimpleHttpRequest create(final String method, final String uri) {
+         return create(Method.normalizedValueOf(method), uri);
+    }
 
-        @Override
-        public SimpleHttpRequest create(final HttpHost host, final String path) {
-            return new SimpleHttpRequest(Methods.DELETE, host, path);
-        }
-    },
+    /**
+     * Creates a new BasicHttpRequest for the given {@code method} and {@code URI}.
+     *
+     * @param method A method supported by this class.
+     * @param uri a non-null request URI.
+     * @return A new BasicHttpRequest.
+     */
+    public static SimpleHttpRequest create(final String method, final URI uri) {
+        return create(Method.normalizedValueOf(method), uri);
+    }
 
-    GET {
-        @Override
-        public SimpleHttpRequest create(final URI uri) {
-            return new SimpleHttpRequest(Methods.GET, uri);
-        }
+    public static SimpleHttpRequest delete(final String uri) {
+        return delete(URI.create(uri));
+    }
 
-        @Override
-        public SimpleHttpRequest create(final HttpHost host, final String path) {
-            return new SimpleHttpRequest(Methods.GET, host, path);
-        }
-    },
+    public static SimpleHttpRequest delete(final URI uri) {
+        return create(Method.DELETE, uri);
+    }
 
-    HEAD {
-        @Override
-        public SimpleHttpRequest create(final URI uri) {
-            return new SimpleHttpRequest(Methods.HEAD, uri);
-        }
+    public static SimpleHttpRequest delete(final HttpHost host, final String path) {
+        return create(Method.DELETE, host, path);
+    }
 
-        @Override
-        public SimpleHttpRequest create(final HttpHost host, final String path) {
-            return new SimpleHttpRequest(Methods.HEAD, host, path);
-        }
-    },
+    public static SimpleHttpRequest get(final String uri) {
+        return get(URI.create(uri));
+    }
 
-    OPTIONS {
-        @Override
-        public SimpleHttpRequest create(final URI uri) {
-            return new SimpleHttpRequest(Methods.OPTIONS, uri);
-        }
+    public static SimpleHttpRequest get(final URI uri) {
+        return create(Method.GET, uri);
+    }
 
-        @Override
-        public SimpleHttpRequest create(final HttpHost host, final String path) {
-            return new SimpleHttpRequest(Methods.OPTIONS, host, path);
-        }
-    },
+    public static SimpleHttpRequest get(final HttpHost host, final String path) {
+        return create(Method.GET, host, path);
+    }
 
-    PATCH {
-        @Override
-        public SimpleHttpRequest create(final URI uri) {
-            return new SimpleHttpRequest(Methods.PATCH, uri);
-        }
+    public static SimpleHttpRequest head(final String uri) {
+        return head(URI.create(uri));
+    }
 
-        @Override
-        public SimpleHttpRequest create(final HttpHost host, final String path) {
-            return new SimpleHttpRequest(Methods.PATCH, host, path);
-        }
-    },
+    public static SimpleHttpRequest head(final URI uri) {
+        return create(Method.HEAD, uri);
+    }
 
-    POST {
-        @Override
-        public SimpleHttpRequest create(final URI uri) {
-            return new SimpleHttpRequest(Methods.POST, uri);
-        }
+    public static SimpleHttpRequest head(final HttpHost host, final String path) {
+        return create(Method.HEAD, host, path);
+    }
 
-        @Override
-        public SimpleHttpRequest create(final HttpHost host, final String path) {
-            return new SimpleHttpRequest(Methods.POST, host, path);
-        }
-    },
+    public static SimpleHttpRequest options(final String uri) {
+        return options(URI.create(uri));
+    }
 
-    PUT {
-        @Override
-        public SimpleHttpRequest create(final URI uri) {
-            return new SimpleHttpRequest(Methods.PUT, uri);
-        }
+    public static SimpleHttpRequest options(final URI uri) {
+        return create(Method.OPTIONS, uri);
+    }
 
-        @Override
-        public SimpleHttpRequest create(final HttpHost host, final String path) {
-            return new SimpleHttpRequest(Methods.PUT, host, path);
-        }
-    },
+    public static SimpleHttpRequest options(final HttpHost host, final String path) {
+        return create(Method.OPTIONS, host, path);
+    }
 
-    TRACE {
-        @Override
-        public SimpleHttpRequest create(final URI uri) {
-            return new SimpleHttpRequest(Methods.TRACE, uri);
-        }
+    public static SimpleHttpRequest patch(final String uri) {
+        return patch(URI.create(uri));
+    }
 
-        @Override
-        public SimpleHttpRequest create(final HttpHost host, final String path) {
-            return new SimpleHttpRequest(Methods.TRACE, host, path);
-        }
-    };
+    public static SimpleHttpRequest patch(final URI uri) {
+        return create(Method.PATCH, uri);
+    }
+
+    public static SimpleHttpRequest patch(final HttpHost host, final String path) {
+        return create(Method.PATCH, host, path);
+    }
+
+    public static SimpleHttpRequest post(final String uri) {
+        return post(URI.create(uri));
+    }
+
+    public static SimpleHttpRequest post(final URI uri) {
+        return create(Method.POST, uri);
+    }
+
+    public static SimpleHttpRequest post(final HttpHost host, final String path) {
+        return create(Method.POST, host, path);
+    }
+
+    public static SimpleHttpRequest put(final String uri) {
+        return put(URI.create(uri));
+    }
+
+    public static SimpleHttpRequest put(final URI uri) {
+        return create(Method.PUT, uri);
+    }
+
+    public static SimpleHttpRequest put(final HttpHost host, final String path) {
+        return create(Method.PUT, host, path);
+    }
+
+    public static SimpleHttpRequest trace(final String uri) {
+        return trace(URI.create(uri));
+    }
+
+    public static SimpleHttpRequest trace(final URI uri) {
+        return create(Method.TRACE, uri);
+    }
+
+    public static SimpleHttpRequest trace(final HttpHost host, final String path) {
+        return create(Method.TRACE, host, path);
+    }
 
     /**
      * Creates a request object of the exact subclass of {@link SimpleHttpRequest}.
@@ -141,8 +166,8 @@ public enum SimpleHttpRequests {
      * @param uri a non-null URI String.
      * @return a new subclass of SimpleHttpRequest
      */
-    public SimpleHttpRequest create(final String uri) {
-        return create(URI.create(uri));
+    public static SimpleHttpRequest create(final Method method, final String uri) {
+        return create(method, URI.create(uri));
     }
 
     /**
@@ -151,7 +176,9 @@ public enum SimpleHttpRequests {
      * @param uri a non-null URI.
      * @return a new subclass of SimpleHttpRequest
      */
-    public abstract SimpleHttpRequest create(URI uri);
+    public static SimpleHttpRequest create(final Method method, final URI uri) {
+        return new SimpleHttpRequest(method, uri);
+    }
 
     /**
      * Creates a request object of the exact subclass of {@link SimpleHttpRequest}.
@@ -160,6 +187,8 @@ public enum SimpleHttpRequests {
      * @param path request path.
      * @return a new subclass of SimpleHttpRequest
      */
-    public abstract SimpleHttpRequest create(final HttpHost host, final String path);
+    public static SimpleHttpRequest create(final Method method, final HttpHost host, final String path) {
+        return new SimpleHttpRequest(method, host, path);
+    }
 
 }

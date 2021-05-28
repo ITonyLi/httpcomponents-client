@@ -37,10 +37,17 @@ import org.apache.hc.core5.util.Args;
 
 /**
  * HTTP response that can enclose a body represented as a simple text string or an array of bytes.
+ * <p>
+ * IMPORTANT: {@link SimpleHttpResponse}s are intended for simple scenarios where entities inclosed
+ * in responses are known to be small. It is generally recommended to use streaming
+ * {@link org.apache.hc.core5.http.nio.AsyncResponseConsumer}s, for instance, such as based on
+ * {@link AbstractCharResponseConsumer} or {@link AbstractBinResponseConsumer}.
  *
  * @since 5.0
  *
  * @see SimpleBody
+ * @see AbstractCharResponseConsumer
+ * @see AbstractBinResponseConsumer
  */
 public final class SimpleHttpResponse extends BasicHttpResponse {
 
@@ -72,7 +79,7 @@ public final class SimpleHttpResponse extends BasicHttpResponse {
     public static SimpleHttpResponse create(final int code, final String content, final ContentType contentType) {
         final SimpleHttpResponse response = new SimpleHttpResponse(code);
         if (content != null) {
-            response.setBodyText(content, contentType);
+            response.setBody(content, contentType);
         }
         return response;
     }
@@ -84,7 +91,7 @@ public final class SimpleHttpResponse extends BasicHttpResponse {
     public static SimpleHttpResponse create(final int code, final byte[] content, final ContentType contentType) {
         final SimpleHttpResponse response = new SimpleHttpResponse(code);
         if (content != null) {
-            response.setBodyBytes(content, contentType);
+            response.setBody(content, contentType);
         }
         return response;
     }
@@ -97,11 +104,11 @@ public final class SimpleHttpResponse extends BasicHttpResponse {
         this.body = body;
     }
 
-    public void setBodyBytes(final byte[] bodyBytes, final ContentType contentType) {
+    public void setBody(final byte[] bodyBytes, final ContentType contentType) {
         this.body = SimpleBody.create(bodyBytes, contentType);
     }
 
-    public void setBodyText(final String bodyText, final ContentType contentType) {
+    public void setBody(final String bodyText, final ContentType contentType) {
         this.body = SimpleBody.create(bodyText, contentType);
     }
 

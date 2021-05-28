@@ -27,7 +27,7 @@
 package org.apache.hc.client5.http.schedule;
 
 import org.hamcrest.CoreMatchers;
-import org.junit.Assert;
+import org.hamcrest.MatcherAssert;
 import org.junit.Test;
 
 public class TestConcurrentCountMap
@@ -35,16 +35,16 @@ public class TestConcurrentCountMap
 
     private static final String IDENTIFIER = "some-identifier";
 
-    private ConcurrentCountMap<String> map = new ConcurrentCountMap<>();
+    private final ConcurrentCountMap<String> map = new ConcurrentCountMap<>();
 
     @Test
     public void testBasics() {
         map.increaseCount(IDENTIFIER);
         map.increaseCount(IDENTIFIER);
-        Assert.assertThat(map.getCount(IDENTIFIER), CoreMatchers.equalTo(2));
+        MatcherAssert.assertThat(map.getCount(IDENTIFIER), CoreMatchers.equalTo(2));
 
         map.resetCount(IDENTIFIER);
-        Assert.assertThat(map.getCount(IDENTIFIER), CoreMatchers.equalTo(0));
+        MatcherAssert.assertThat(map.getCount(IDENTIFIER), CoreMatchers.equalTo(0));
     }
 
 }

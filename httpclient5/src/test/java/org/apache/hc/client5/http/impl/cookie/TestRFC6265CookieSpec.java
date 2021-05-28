@@ -28,13 +28,13 @@
 package org.apache.hc.client5.http.impl.cookie;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hc.client5.http.cookie.CommonCookieAttributeHandler;
 import org.apache.hc.client5.http.cookie.Cookie;
 import org.apache.hc.client5.http.cookie.CookieOrigin;
 import org.apache.hc.client5.http.cookie.MalformedCookieException;
-import org.apache.hc.client5.http.cookie.SetCookie;
 import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.Assert;
@@ -66,8 +66,8 @@ public class TestRFC6265CookieSpec {
         Assert.assertEquals("stuff", cookie.getAttribute("this"));
         Assert.assertEquals(null, cookie.getAttribute("that"));
 
-        Mockito.verify(h1).parse(ArgumentMatchers.<SetCookie>any(), ArgumentMatchers.eq("stuff"));
-        Mockito.verify(h2, Mockito.never()).parse(ArgumentMatchers.<SetCookie>any(), ArgumentMatchers.anyString());
+        Mockito.verify(h1).parse(ArgumentMatchers.any(), ArgumentMatchers.eq("stuff"));
+        Mockito.verify(h2, Mockito.never()).parse(ArgumentMatchers.any(), ArgumentMatchers.anyString());
     }
 
     @Test
@@ -85,13 +85,14 @@ public class TestRFC6265CookieSpec {
         Assert.assertEquals("stuff", cookie.getAttribute("this"));
     }
 
-    @Test(expected = MalformedCookieException.class)
+    @Test
     public void testParseCookieWrongHeader() throws Exception {
         final RFC6265CookieSpec cookiespec = new RFC6265CookieSpec();
 
         final Header header = new BasicHeader("Set-Cookie2", "blah");
         final CookieOrigin origin = new CookieOrigin("host", 80, "/path/", true);
-        cookiespec.parse(header, origin);
+        Assert.assertThrows(MalformedCookieException.class, () ->
+                cookiespec.parse(header, origin));
     }
 
     @Test
@@ -114,13 +115,14 @@ public class TestRFC6265CookieSpec {
         Assert.assertEquals(0, cookies.size());
     }
 
-    @Test(expected = MalformedCookieException.class)
+    @Test
     public void testParseCookieMissingValue2() throws Exception {
         final RFC6265CookieSpec cookiespec = new RFC6265CookieSpec();
 
         final Header header = new BasicHeader("Set-Cookie", "blah;");
         final CookieOrigin origin = new CookieOrigin("host", 80, "/path/", true);
-        cookiespec.parse(header, origin);
+        Assert.assertThrows(MalformedCookieException.class, () ->
+                cookiespec.parse(header, origin));
     }
 
     @Test
@@ -264,7 +266,7 @@ public class TestRFC6265CookieSpec {
         final Cookie cookie1 = new BasicClientCookie("name1", "value");
 
         final RFC6265CookieSpec cookiespec = new RFC6265CookieSpec();
-        final List<Header> headers = cookiespec.formatCookies(Arrays.asList(cookie1));
+        final List<Header> headers = cookiespec.formatCookies(Collections.singletonList(cookie1));
         Assert.assertNotNull(headers);
         Assert.assertEquals(1, headers.size());
         final Header header = headers.get(0);
@@ -297,8 +299,8 @@ public class TestRFC6265CookieSpec {
         final CookieOrigin origin = new CookieOrigin("host", 80, "/path/", true);
         cookiespec.parse(header, origin);
 
-        Mockito.verify(h1).parse(ArgumentMatchers.<SetCookie>any(), ArgumentMatchers.eq("morestuff"));
-        Mockito.verify(h1, Mockito.times(1)).parse(ArgumentMatchers.<SetCookie>any(), ArgumentMatchers.anyString());
+        Mockito.verify(h1).parse(ArgumentMatchers.any(), ArgumentMatchers.eq("morestuff"));
+        Mockito.verify(h1, Mockito.times(1)).parse(ArgumentMatchers.any(), ArgumentMatchers.anyString());
     }
 
     @Test
@@ -314,8 +316,8 @@ public class TestRFC6265CookieSpec {
         final CookieOrigin origin = new CookieOrigin("host", 80, "/path/", true);
         cookiespec.parse(header, origin);
 
-        Mockito.verify(h1, Mockito.never()).parse(ArgumentMatchers.<SetCookie>any(), ArgumentMatchers.anyString());
-        Mockito.verify(h2).parse(ArgumentMatchers.<SetCookie>any(), ArgumentMatchers.eq("otherstuff"));
+        Mockito.verify(h1, Mockito.never()).parse(ArgumentMatchers.any(), ArgumentMatchers.anyString());
+        Mockito.verify(h2).parse(ArgumentMatchers.any(), ArgumentMatchers.eq("otherstuff"));
     }
 
 }

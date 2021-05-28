@@ -32,19 +32,21 @@ import java.net.UnknownHostException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
 
 import javax.net.ssl.SSLContext;
 
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.HttpRoute;
 import org.apache.hc.client5.http.SystemDefaultDnsResolver;
-import org.apache.hc.client5.http.auth.AuthSchemes;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.cookie.BasicCookieStore;
-import org.apache.hc.client5.http.cookie.CookieSpecs;
 import org.apache.hc.client5.http.cookie.CookieStore;
+import org.apache.hc.client5.http.cookie.StandardCookieSpec;
 import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
@@ -171,15 +173,17 @@ public class ClientConfiguration {
                 socketFactoryRegistry, PoolConcurrencyPolicy.STRICT, PoolReusePolicy.LIFO, TimeValue.ofMinutes(5),
                 null, dnsResolver, null);
 
-        // Create socket configuration
-        final SocketConfig socketConfig = SocketConfig.custom()
-            .setTcpNoDelay(true)
-            .build();
         // Configure the connection manager to use socket configuration either
         // by default or for a specific host.
-        connManager.setDefaultSocketConfig(socketConfig);
-        // Validate connections after 1 sec of inactivity
-        connManager.setValidateAfterInactivity(TimeValue.ofSeconds(10));
+        connManager.setDefaultSocketConfig(SocketConfig.custom()
+                .setTcpNoDelay(true)
+                .build());
+        // Validate connections after 10 sec of inactivity
+        connManager.setDefaultConnectionConfig(ConnectionConfig.custom()
+                .setConnectTimeout(Timeout.ofSeconds(30))
+                .setSocketTimeout(Timeout.ofSeconds(30))
+                .setValidateAfterInactivity(TimeValue.ofSeconds(10))
+                .build());
 
         // Configure total max or per route limits for persistent connections
         // that can be kept in the pool or leased by the connection manager.
@@ -193,10 +197,10 @@ public class ClientConfiguration {
         final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
         // Create global request configuration
         final RequestConfig defaultRequestConfig = RequestConfig.custom()
-            .setCookieSpec(CookieSpecs.STANDARD.ident)
+            .setCookieSpec(StandardCookieSpec.STRICT)
             .setExpectContinueEnabled(true)
-            .setTargetPreferredAuthSchemes(Arrays.asList(AuthSchemes.NTLM.ident, AuthSchemes.DIGEST.ident))
-            .setProxyPreferredAuthSchemes(Arrays.asList(AuthSchemes.BASIC.ident))
+            .setTargetPreferredAuthSchemes(Arrays.asList(StandardAuthScheme.NTLM, StandardAuthScheme.DIGEST))
+            .setProxyPreferredAuthSchemes(Collections.singletonList(StandardAuthScheme.BASIC))
             .build();
 
         // Create an HttpClient with the given custom dependencies and configuration.
@@ -213,8 +217,6 @@ public class ClientConfiguration {
             // They will take precedence over the one set at the client level.
             final RequestConfig requestConfig = RequestConfig.copy(defaultRequestConfig)
                     .setConnectionRequestTimeout(Timeout.ofSeconds(5))
-                    .setConnectTimeout(Timeout.ofSeconds(5))
-                    .setProxy(new HttpHost("myotherproxy", 8080))
                     .build();
             httpget.setConfig(requestConfig);
 

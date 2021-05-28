@@ -29,12 +29,12 @@ package org.apache.hc.client5.http.examples;
 import java.net.URL;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.cookie.CookieSpecs;
-import org.apache.hc.client5.http.cookie.CookieSpecProvider;
+import org.apache.hc.client5.http.cookie.StandardCookieSpec;
+import org.apache.hc.client5.http.cookie.CookieSpecFactory;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.impl.cookie.RFC6265CookieSpecProvider;
+import org.apache.hc.client5.http.impl.cookie.RFC6265CookieSpecFactory;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.client5.http.io.HttpClientConnectionManager;
 import org.apache.hc.client5.http.psl.PublicSuffixMatcher;
@@ -61,10 +61,10 @@ public class ClientCustomPublicSuffixList {
         // Please use the publicsuffix.org URL to download the list no more than once per day !!!
         // Please consider making a local copy !!!
 
-        final RFC6265CookieSpecProvider cookieSpecProvider = new RFC6265CookieSpecProvider(publicSuffixMatcher);
-        final Lookup<CookieSpecProvider> cookieSpecRegistry = RegistryBuilder.<CookieSpecProvider>create()
-                .register(CookieSpecs.STANDARD.ident, cookieSpecProvider)
-                .register(CookieSpecs.STANDARD_STRICT.ident, cookieSpecProvider)
+        final RFC6265CookieSpecFactory cookieSpecFactory = new RFC6265CookieSpecFactory(publicSuffixMatcher);
+        final Lookup<CookieSpecFactory> cookieSpecRegistry = RegistryBuilder.<CookieSpecFactory>create()
+                .register(StandardCookieSpec.RELAXED, cookieSpecFactory)
+                .register(StandardCookieSpec.STRICT, cookieSpecFactory)
                 .build();
         final SSLConnectionSocketFactory sslsf = new SSLConnectionSocketFactory(
                 SSLContexts.createDefault(),

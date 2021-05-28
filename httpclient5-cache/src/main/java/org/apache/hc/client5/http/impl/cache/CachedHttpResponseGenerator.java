@@ -42,6 +42,7 @@ import org.apache.hc.core5.http.HttpResponse;
 import org.apache.hc.core5.http.HttpStatus;
 import org.apache.hc.core5.http.HttpVersion;
 import org.apache.hc.core5.http.message.BasicHeader;
+import org.apache.hc.core5.util.TimeValue;
 
 /**
  * Rebuilds an {@link HttpResponse} from a {@link HttpCacheEntry}
@@ -75,15 +76,15 @@ class CachedHttpResponseGenerator {
             final ContentType contentType = h != null ? ContentType.parse(h.getValue()) : null;
             final byte[] content = resource.get();
             addMissingContentLengthHeader(response, content);
-            response.setBodyBytes(content, contentType);
+            response.setBody(content, contentType);
         }
 
-        final long age = this.validityStrategy.getCurrentAgeSecs(entry, now);
-        if (age > 0) {
-            if (age >= Integer.MAX_VALUE) {
-                response.setHeader(HeaderConstants.AGE, "2147483648");
+        final TimeValue age = this.validityStrategy.getCurrentAge(entry, now);
+        if (TimeValue.isPositive(age)) {
+            if (age.compareTo(CacheValidityPolicy.MAX_AGE) >= 0) {
+                response.setHeader(HeaderConstants.AGE, "" + CacheValidityPolicy.MAX_AGE.toSeconds());
             } else {
-                response.setHeader(HeaderConstants.AGE, "" + ((int) age));
+                response.setHeader(HeaderConstants.AGE, "" + age.toSeconds());
             }
         }
 
@@ -161,7 +162,7 @@ class CachedHttpResponseGenerator {
 
     /**
      * Extract error information about the {@link HttpRequest} telling the 'caller'
-     * that a problem occured.
+     * that a problem occurred.
      *
      * @param errorCheck What type of error should I get
      * @return The {@link HttpResponse} that is the error generated

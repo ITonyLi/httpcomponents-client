@@ -27,8 +27,9 @@
 package org.apache.hc.client5.http.impl.auth;
 
 import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.auth.AuthScheme;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
 import org.apache.hc.client5.http.auth.KerberosConfig;
 import org.apache.hc.core5.annotation.Contract;
 import org.apache.hc.core5.annotation.Experimental;
@@ -36,7 +37,7 @@ import org.apache.hc.core5.annotation.ThreadingBehavior;
 import org.apache.hc.core5.http.protocol.HttpContext;
 
 /**
- * {@link AuthSchemeProvider} implementation that creates and initializes
+ * {@link AuthSchemeFactory} implementation that creates and initializes
  * {@link KerberosScheme} instances.
  * <p>
  * Please note this class is considered experimental and may be discontinued or removed
@@ -47,7 +48,13 @@ import org.apache.hc.core5.http.protocol.HttpContext;
  */
 @Contract(threading = ThreadingBehavior.STATELESS)
 @Experimental
-public class KerberosSchemeFactory implements AuthSchemeProvider {
+public class KerberosSchemeFactory implements AuthSchemeFactory {
+
+    /**
+     * Singleton instance for the default configuration.
+     */
+    public static final KerberosSchemeFactory DEFAULT = new KerberosSchemeFactory(KerberosConfig.DEFAULT,
+            SystemDefaultDnsResolver.INSTANCE);
 
     private final KerberosConfig config;
     private final DnsResolver dnsResolver;

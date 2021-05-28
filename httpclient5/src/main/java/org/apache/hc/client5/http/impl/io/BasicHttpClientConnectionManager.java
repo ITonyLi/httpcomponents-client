@@ -32,11 +32,14 @@ import java.util.Date;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.HttpRoute;
 import org.apache.hc.client5.http.SchemePortResolver;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.impl.ConnPoolSupport;
 import org.apache.hc.client5.http.impl.ConnectionShutdownException;
 import org.apache.hc.client5.http.io.ConnectionEndpoint;
 import org.apache.hc.client5.http.io.HttpClientConnectionManager;
@@ -90,10 +93,13 @@ import org.slf4j.LoggerFactory;
 @Contract(threading = ThreadingBehavior.SAFE)
 public class BasicHttpClientConnectionManager implements HttpClientConnectionManager {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(BasicHttpClientConnectionManager.class);
+
+    private static final AtomicLong COUNT = new AtomicLong(0);
 
     private final HttpClientConnectionOperator connectionOperator;
     private final HttpConnectionFactory<ManagedHttpClientConnection> connFactory;
+    private final String id;
 
     private ManagedHttpClientConnection conn;
     private HttpRoute route;
@@ -102,8 +108,11 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
     private long expiry;
     private boolean leased;
     private SocketConfig socketConfig;
+    private ConnectionConfig connectionConfig;
 
     private final AtomicBoolean closed;
+
+    private volatile TimeValue validateAfterInactivity;
 
     private static Registry<ConnectionSocketFactory> getDefaultRegistry() {
         return RegistryBuilder.<ConnectionSocketFactory>create()
@@ -130,9 +139,11 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
         super();
         this.connectionOperator = Args.notNull(httpClientConnectionOperator, "Connection operator");
         this.connFactory = connFactory != null ? connFactory : ManagedHttpClientConnectionFactory.INSTANCE;
+        this.id = String.format("ep-%010d", COUNT.getAndIncrement());
         this.expiry = Long.MAX_VALUE;
         this.socketConfig = SocketConfig.DEFAULT;
         this.closed = new AtomicBoolean(false);
+        this.validateAfterInactivity = TimeValue.ofSeconds(2L);
     }
 
     public BasicHttpClientConnectionManager(
@@ -178,6 +189,20 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
         this.socketConfig = socketConfig != null ? socketConfig : SocketConfig.DEFAULT;
     }
 
+    /**
+     * @since 5.2
+     */
+    public synchronized ConnectionConfig getConnectionConfig() {
+        return connectionConfig;
+    }
+
+    /**
+     * @since 5.2
+     */
+    public synchronized void setConnectionConfig(final ConnectionConfig connectionConfig) {
+        this.connectionConfig = connectionConfig != null ? connectionConfig : ConnectionConfig.DEFAULT;
+    }
+
     public LeaseRequest lease(final String id, final HttpRoute route, final Object state) {
         return lease(id, route, Timeout.DISABLED, state);
     }
@@ -206,7 +231,9 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
 
     private synchronized void closeConnection(final CloseMode closeMode) {
         if (this.conn != null) {
-            this.log.debug("Closing connection " + closeMode);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Closing connection {}", id, closeMode);
+            }
             this.conn.close(closeMode);
             this.conn = null;
         }
@@ -214,17 +241,37 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
 
     private void checkExpiry() {
         if (this.conn != null && System.currentTimeMillis() >= this.expiry) {
-            if (this.log.isDebugEnabled()) {
-                this.log.debug("Connection expired @ " + new Date(this.expiry));
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Connection expired @ {}", id, new Date(this.expiry));
             }
             closeConnection(CloseMode.GRACEFUL);
         }
     }
 
+    private void validate() {
+        final TimeValue validateAfterInactivitySnapshot = validateAfterInactivity;
+        if (this.conn != null
+                && TimeValue.isNonNegative(validateAfterInactivitySnapshot)
+                && updated + validateAfterInactivitySnapshot.toMilliseconds() <= System.currentTimeMillis()) {
+            boolean stale;
+            try {
+                stale = conn.isStale();
+            } catch (final IOException ignore) {
+                stale = true;
+            }
+            if (stale) {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("{} connection {} is stale", id, ConnPoolSupport.getId(conn));
+                }
+                closeConnection(CloseMode.GRACEFUL);
+            }
+        }
+    }
+
     synchronized ManagedHttpClientConnection getConnection(final HttpRoute route, final Object state) throws IOException {
         Asserts.check(!this.closed.get(), "Connection manager has been shut down");
-        if (this.log.isDebugEnabled()) {
-            this.log.debug("Get connection for route " + route);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} Get connection for route {}", id, route);
         }
         Asserts.check(!this.leased, "Connection is still allocated");
         if (!LangUtils.equals(this.route, route) || !LangUtils.equals(this.state, state)) {
@@ -233,6 +280,7 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
         this.route = route;
         this.state = state;
         checkExpiry();
+        validate();
         if (this.conn == null) {
             this.conn = this.connFactory.createConnection(null);
         } else {
@@ -254,8 +302,8 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
         Args.notNull(endpoint, "Managed endpoint");
         final InternalConnectionEndpoint internalEndpoint = cast(endpoint);
         final ManagedHttpClientConnection conn = internalEndpoint.detach();
-        if (conn != null && this.log.isDebugEnabled()) {
-            this.log.debug("Releasing connection " + conn);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} Releasing connection {}", id, conn);
         }
         if (this.closed.get()) {
             return;
@@ -265,25 +313,27 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
                 this.conn.close(CloseMode.GRACEFUL);
             }
             this.updated = System.currentTimeMillis();
-            if (!this.conn.isOpen()) {
+            if (!this.conn.isOpen() && !this.conn.isConsistent()) {
                 this.conn = null;
                 this.route = null;
                 this.conn = null;
                 this.expiry = Long.MAX_VALUE;
-                if (this.log.isDebugEnabled()) {
-                    this.log.debug("Connection is not kept alive");
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("{} Connection is not kept alive", id);
                 }
             } else {
                 this.state = state;
-                conn.passivate();
+                if (conn != null) {
+                    conn.passivate();
+                }
                 if (TimeValue.isPositive(keepAlive)) {
-                    if (this.log.isDebugEnabled()) {
-                        this.log.debug("Connection can be kept alive for " + keepAlive);
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("{} Connection can be kept alive for {}", id, keepAlive);
                     }
-                    this.expiry = this.updated + keepAlive.toMillis();
+                    this.expiry = this.updated + keepAlive.toMilliseconds();
                 } else {
-                    if (this.log.isDebugEnabled()) {
-                        this.log.debug("Connection can be kept alive indefinitely");
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("{} Connection can be kept alive indefinitely", id);
                     }
                     this.expiry = Long.MAX_VALUE;
                 }
@@ -294,7 +344,7 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
     }
 
     @Override
-    public void connect(final ConnectionEndpoint endpoint, final TimeValue connectTimeout, final HttpContext context) throws IOException {
+    public synchronized void connect(final ConnectionEndpoint endpoint, final TimeValue timeout, final HttpContext context) throws IOException {
         Args.notNull(endpoint, "Endpoint");
 
         final InternalConnectionEndpoint internalEndpoint = cast(endpoint);
@@ -308,17 +358,24 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
         } else {
             host = route.getTargetHost();
         }
+        final ConnectionConfig config = connectionConfig != null ? connectionConfig : ConnectionConfig.DEFAULT;
+        final TimeValue connectTimeout = timeout != null ? timeout : config.getConnectTimeout();
+        final ManagedHttpClientConnection connection = internalEndpoint.getConnection();
         this.connectionOperator.connect(
-                internalEndpoint.getConnection(),
+                connection,
                 host,
                 route.getLocalSocketAddress(),
                 connectTimeout,
                 this.socketConfig,
                 context);
+        final Timeout socketTimeout = config.getSocketTimeout();
+        if (socketTimeout != null) {
+            connection.setSocketTimeout(socketTimeout);
+        }
     }
 
     @Override
-    public void upgrade(
+    public synchronized void upgrade(
             final ConnectionEndpoint endpoint,
             final HttpContext context) throws IOException {
         Args.notNull(endpoint, "Endpoint");
@@ -345,7 +402,7 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
             return;
         }
         if (!this.leased) {
-            long time = idleTime.toMillis();
+            long time = idleTime.toMilliseconds();
             if (time < 0) {
                 time = 0;
             }
@@ -354,6 +411,27 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
                 closeConnection(CloseMode.GRACEFUL);
             }
         }
+    }
+
+    /**
+     * @see #setValidateAfterInactivity(TimeValue)
+     *
+     * @since 5.1
+     */
+    public TimeValue getValidateAfterInactivity() {
+        return validateAfterInactivity;
+    }
+
+    /**
+     * Defines period of inactivity after which persistent connections must
+     * be re-validated prior to being {@link #lease(String, HttpRoute, Object)} leased} to the consumer.
+     * Negative values passed to this method disable connection validation. This check helps
+     * detect connections that have become stale (half-closed) while kept inactive in the pool.
+     *
+     * @since 5.1
+     */
+    public void setValidateAfterInactivity(final TimeValue validateAfterInactivity) {
+        this.validateAfterInactivity = validateAfterInactivity;
     }
 
     class InternalConnectionEndpoint extends ConnectionEndpoint {
@@ -417,12 +495,15 @@ public class BasicHttpClientConnectionManager implements HttpClientConnectionMan
 
         @Override
         public ClassicHttpResponse execute(
-                final String id,
+                final String exchangeId,
                 final ClassicHttpRequest request,
                 final HttpRequestExecutor requestExecutor,
                 final HttpContext context) throws IOException, HttpException {
             Args.notNull(request, "HTTP request");
             Args.notNull(requestExecutor, "Request executor");
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Executing exchange {}", id, exchangeId);
+            }
             return requestExecutor.execute(request, getValidatedConnection(), context);
         }
 

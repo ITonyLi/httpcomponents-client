@@ -27,24 +27,44 @@
 
 package org.apache.hc.client5.http.impl.auth;
 
+import java.nio.charset.Charset;
+
 import org.apache.hc.client5.http.auth.AuthScheme;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
 import org.apache.hc.core5.annotation.Contract;
 import org.apache.hc.core5.annotation.ThreadingBehavior;
 import org.apache.hc.core5.http.protocol.HttpContext;
 
 /**
- * {@link AuthSchemeProvider} implementation that creates and initializes
+ * {@link AuthSchemeFactory} implementation that creates and initializes
  * {@link DigestScheme} instances.
  *
  * @since 4.0
  */
 @Contract(threading = ThreadingBehavior.STATELESS)
-public class DigestSchemeFactory implements AuthSchemeProvider {
+public class DigestSchemeFactory implements AuthSchemeFactory {
+
+    /**
+     * Singleton instance.
+     */
+    public static final DigestSchemeFactory INSTANCE = new DigestSchemeFactory();
+
+    private final Charset charset;
+
+    /**
+     * @since 5.1
+     */
+    public DigestSchemeFactory(final Charset charset) {
+        this.charset = charset;
+    }
+
+    public DigestSchemeFactory() {
+        this(null);
+    }
 
     @Override
     public AuthScheme create(final HttpContext context) {
-        return new DigestScheme();
+        return new DigestScheme(charset);
     }
 
 }

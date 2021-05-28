@@ -29,12 +29,13 @@ package org.apache.hc.client5.http.entity.mime;
 
 import java.io.File;
 import java.io.InputStream;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpEntity;
@@ -56,14 +57,16 @@ public class MultipartEntityBuilder {
             "-_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
                     .toCharArray();
 
-    private final static String FORM_SUBTYPE = "form-data";
-    private final static String MIXED_SUBTYPE = "mixed";
-
     private ContentType contentType;
     private HttpMultipartMode mode = HttpMultipartMode.STRICT;
-    private String boundary = null;
-    private Charset charset = null;
-    private List<MultipartPart> multipartParts = null;
+    private String boundary;
+    private Charset charset;
+    private List<MultipartPart> multipartParts;
+
+    /**
+     * An empty immutable {@code NameValuePair} array.
+     */
+    private static final NameValuePair[] EMPTY_NAME_VALUE_ARRAY = new NameValuePair[0];
 
     public static MultipartEntityBuilder create() {
         return new MultipartEntityBuilder();
@@ -78,7 +81,7 @@ public class MultipartEntityBuilder {
     }
 
     public MultipartEntityBuilder setLaxMode() {
-        this.mode = HttpMultipartMode.BROWSER_COMPATIBLE;
+        this.mode = HttpMultipartMode.LEGACY;
         return this;
     }
 
@@ -176,12 +179,13 @@ public class MultipartEntityBuilder {
     }
 
     private String generateBoundary() {
-        final StringBuilder buffer = new StringBuilder();
-        final Random rand = new Random();
-        final int count = rand.nextInt(11) + 30; // a random size from 30 to 40
-        for (int i = 0; i < count; i++) {
-            buffer.append(MULTIPART_CHARS[rand.nextInt(MULTIPART_CHARS.length)]);
+        final ThreadLocalRandom rand = ThreadLocalRandom.current();
+        final int count = rand.nextInt(30, 41); // a random size from 30 to 40
+        final CharBuffer buffer = CharBuffer.allocate(count);
+        while (buffer.hasRemaining()) {
+            buffer.put(MULTIPART_CHARS[rand.nextInt(MULTIPART_CHARS.length)]);
         }
+        buffer.flip();
         return buffer.toString();
     }
 
@@ -202,7 +206,7 @@ public class MultipartEntityBuilder {
         if (charsetCopy != null) {
             paramsList.add(new BasicNameValuePair("charset", charsetCopy.name()));
         }
-        final NameValuePair[] params = paramsList.toArray(new NameValuePair[paramsList.size()]);
+        final NameValuePair[] params = paramsList.toArray(EMPTY_NAME_VALUE_ARRAY);
 
         final ContentType contentTypeCopy;
         if (contentType != null) {
@@ -219,27 +223,28 @@ public class MultipartEntityBuilder {
             }
 
             if (formData) {
-                contentTypeCopy = ContentType.create("multipart/" + FORM_SUBTYPE, params);
+                contentTypeCopy = ContentType.MULTIPART_FORM_DATA.withParameters(params);
             } else {
-                contentTypeCopy = ContentType.create("multipart/" + MIXED_SUBTYPE, params);
+                contentTypeCopy = ContentType.create("multipart/mixed", params);
             }
         }
         final List<MultipartPart> multipartPartsCopy = multipartParts != null ? new ArrayList<>(multipartParts) :
-                Collections.<MultipartPart>emptyList();
+                Collections.emptyList();
         final HttpMultipartMode modeCopy = mode != null ? mode : HttpMultipartMode.STRICT;
         final AbstractMultipartFormat form;
         switch (modeCopy) {
-            case BROWSER_COMPATIBLE:
-                form = new HttpBrowserCompatibleMultipart(charsetCopy, boundaryCopy, multipartPartsCopy);
+            case LEGACY:
+                form = new LegacyMultipart(charsetCopy, boundaryCopy, multipartPartsCopy);
                 break;
-            case RFC6532:
-                form = new HttpRFC6532Multipart(charsetCopy, boundaryCopy, multipartPartsCopy);
-                break;
-            case RFC7578:
-                if (charsetCopy == null) {
-                    charsetCopy = StandardCharsets.UTF_8;
+            case EXTENDED:
+                if (contentTypeCopy.isSameMimeType(ContentType.MULTIPART_FORM_DATA)) {
+                    if (charsetCopy == null) {
+                        charsetCopy = StandardCharsets.UTF_8;
+                    }
+                    form = new HttpRFC7578Multipart(charsetCopy, boundaryCopy, multipartPartsCopy);
+                } else {
+                    form = new HttpRFC6532Multipart(charsetCopy, boundaryCopy, multipartPartsCopy);
                 }
-                form = new HttpRFC7578Multipart(charsetCopy, boundaryCopy, multipartPartsCopy);
                 break;
             default:
                 form = new HttpStrictMultipart(StandardCharsets.US_ASCII, boundaryCopy, multipartPartsCopy);

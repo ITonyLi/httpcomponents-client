@@ -26,9 +26,7 @@
  */
 package org.apache.hc.client5.http.impl.cache;
 
-import java.io.Closeable;
 import java.io.File;
-import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
@@ -38,10 +36,11 @@ import org.apache.hc.client5.http.cache.HttpAsyncCacheStorage;
 import org.apache.hc.client5.http.cache.HttpAsyncCacheStorageAdaptor;
 import org.apache.hc.client5.http.cache.HttpCacheStorage;
 import org.apache.hc.client5.http.cache.ResourceFactory;
-import org.apache.hc.client5.http.impl.ChainElements;
+import org.apache.hc.client5.http.impl.ChainElement;
 import org.apache.hc.client5.http.impl.async.H2AsyncClientBuilder;
 import org.apache.hc.client5.http.impl.schedule.ImmediateSchedulingStrategy;
 import org.apache.hc.client5.http.schedule.SchedulingStrategy;
+import org.apache.hc.core5.annotation.Experimental;
 import org.apache.hc.core5.http.config.NamedElementChain;
 
 /**
@@ -50,6 +49,7 @@ import org.apache.hc.core5.http.config.NamedElementChain;
  *
  * @since 5.0
  */
+@Experimental
 public class CachingH2AsyncClientBuilder extends H2AsyncClientBuilder {
 
     private ResourceFactory resourceFactory;
@@ -128,14 +128,7 @@ public class CachingH2AsyncClientBuilder extends H2AsyncClientBuilder {
             } else {
                 final ManagedHttpCacheStorage managedStorage = new ManagedHttpCacheStorage(config);
                 if (this.deleteCache) {
-                    addCloseable(new Closeable() {
-
-                        @Override
-                        public void close() throws IOException {
-                            managedStorage.shutdown();
-                        }
-
-                    });
+                    addCloseable(managedStorage::shutdown);
                 } else {
                     addCloseable(managedStorage);
                 }
@@ -151,14 +144,7 @@ public class CachingH2AsyncClientBuilder extends H2AsyncClientBuilder {
         DefaultAsyncCacheRevalidator cacheRevalidator = null;
         if (config.getAsynchronousWorkers() > 0) {
             final ScheduledExecutorService executorService = new ScheduledThreadPoolExecutor(config.getAsynchronousWorkers());
-            addCloseable(new Closeable() {
-
-                @Override
-                public void close() throws IOException {
-                    executorService.shutdownNow();
-                }
-
-            });
+            addCloseable(executorService::shutdownNow);
             cacheRevalidator = new DefaultAsyncCacheRevalidator(
                     executorService,
                     this.schedulingStrategy != null ? this.schedulingStrategy : ImmediateSchedulingStrategy.INSTANCE);
@@ -168,7 +154,7 @@ public class CachingH2AsyncClientBuilder extends H2AsyncClientBuilder {
                 httpCache,
                 cacheRevalidator,
                 config);
-        execChainDefinition.addBefore(ChainElements.PROTOCOL.name(), cachingExec, ChainElements.CACHING.name());
+        execChainDefinition.addBefore(ChainElement.PROTOCOL.name(), cachingExec, ChainElement.CACHING.name());
     }
 
 }

@@ -57,7 +57,7 @@ import org.slf4j.LoggerFactory;
 @Contract(threading = ThreadingBehavior.STATELESS)
 public class ResponseProcessCookies implements HttpResponseInterceptor {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(ResponseProcessCookies.class);
 
     public ResponseProcessCookies() {
         super();
@@ -70,30 +70,38 @@ public class ResponseProcessCookies implements HttpResponseInterceptor {
         Args.notNull(context, "HTTP context");
 
         final HttpClientContext clientContext = HttpClientContext.adapt(context);
+        final String exchangeId = clientContext.getExchangeId();
 
         // Obtain actual CookieSpec instance
         final CookieSpec cookieSpec = clientContext.getCookieSpec();
         if (cookieSpec == null) {
-            this.log.debug("Cookie spec not specified in HTTP context");
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Cookie spec not specified in HTTP context", exchangeId);
+            }
             return;
         }
         // Obtain cookie store
         final CookieStore cookieStore = clientContext.getCookieStore();
         if (cookieStore == null) {
-            this.log.debug("Cookie store not specified in HTTP context");
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Cookie store not specified in HTTP context", exchangeId);
+            }
             return;
         }
         // Obtain actual CookieOrigin instance
         final CookieOrigin cookieOrigin = clientContext.getCookieOrigin();
         if (cookieOrigin == null) {
-            this.log.debug("Cookie origin not specified in HTTP context");
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Cookie origin not specified in HTTP context", exchangeId);
+            }
             return;
         }
         final Iterator<Header> it = response.headerIterator("Set-Cookie");
-        processCookies(it, cookieSpec, cookieOrigin, cookieStore);
+        processCookies(exchangeId, it, cookieSpec, cookieOrigin, cookieStore);
     }
 
     private void processCookies(
+            final String exchangeId,
             final Iterator<Header> iterator,
             final CookieSpec cookieSpec,
             final CookieOrigin cookieOrigin,
@@ -107,26 +115,24 @@ public class ResponseProcessCookies implements HttpResponseInterceptor {
                         cookieSpec.validate(cookie, cookieOrigin);
                         cookieStore.addCookie(cookie);
 
-                        if (this.log.isDebugEnabled()) {
-                            this.log.debug("Cookie accepted [" + formatCooke(cookie) + "]");
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("{} Cookie accepted [{}]", exchangeId, formatCookie(cookie));
                         }
                     } catch (final MalformedCookieException ex) {
-                        if (this.log.isWarnEnabled()) {
-                            this.log.warn("Cookie rejected [" + formatCooke(cookie) + "] "
-                                    + ex.getMessage());
+                        if (LOG.isWarnEnabled()) {
+                            LOG.warn("{} Cookie rejected [{}] {}", exchangeId, formatCookie(cookie), ex.getMessage());
                         }
                     }
                 }
             } catch (final MalformedCookieException ex) {
-                if (this.log.isWarnEnabled()) {
-                    this.log.warn("Invalid cookie header: \""
-                            + header + "\". " + ex.getMessage());
+                if (LOG.isWarnEnabled()) {
+                    LOG.warn("{} Invalid cookie header: \"{}\". {}", exchangeId, header, ex.getMessage());
                 }
             }
         }
     }
 
-    private static String formatCooke(final Cookie cookie) {
+    private static String formatCookie(final Cookie cookie) {
         final StringBuilder buf = new StringBuilder();
         buf.append(cookie.getName());
         buf.append("=\"");

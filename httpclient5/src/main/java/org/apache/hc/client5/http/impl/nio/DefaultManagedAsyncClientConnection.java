@@ -34,7 +34,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
 
-import org.apache.hc.client5.http.impl.ConnPoolSupport;
 import org.apache.hc.client5.http.nio.ManagedAsyncClientConnection;
 import org.apache.hc.core5.http.EndpointDetails;
 import org.apache.hc.core5.http.HttpConnection;
@@ -46,7 +45,6 @@ import org.apache.hc.core5.net.NamedEndpoint;
 import org.apache.hc.core5.reactor.Command;
 import org.apache.hc.core5.reactor.IOEventHandler;
 import org.apache.hc.core5.reactor.IOSession;
-import org.apache.hc.core5.reactor.ProtocolLayer;
 import org.apache.hc.core5.reactor.ssl.SSLBufferMode;
 import org.apache.hc.core5.reactor.ssl.SSLSessionInitializer;
 import org.apache.hc.core5.reactor.ssl.SSLSessionVerifier;
@@ -59,7 +57,7 @@ import org.slf4j.LoggerFactory;
 
 final class DefaultManagedAsyncClientConnection implements ManagedAsyncClientConnection, Identifiable {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultManagedAsyncClientConnection.class);
 
     private final IOSession ioSession;
     private final Timeout socketTimeout;
@@ -73,14 +71,14 @@ final class DefaultManagedAsyncClientConnection implements ManagedAsyncClientCon
 
     @Override
     public String getId() {
-        return ConnPoolSupport.getId(ioSession);
+        return ioSession.getId();
     }
 
     @Override
     public void close(final CloseMode closeMode) {
         if (this.closed.compareAndSet(false, true)) {
-            if (log.isDebugEnabled()) {
-                log.debug(getId() + ": Shutdown connection " + closeMode);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Shutdown connection {}", getId(), closeMode);
             }
             ioSession.close(closeMode);
         }
@@ -89,8 +87,8 @@ final class DefaultManagedAsyncClientConnection implements ManagedAsyncClientCon
     @Override
     public void close() throws IOException {
         if (this.closed.compareAndSet(false, true)) {
-            if (log.isDebugEnabled()) {
-                log.debug(getId() + ": Close connection");
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} Close connection", getId());
             }
             ioSession.enqueue(new ShutdownCommand(CloseMode.GRACEFUL), Command.Priority.IMMEDIATE);
         }
@@ -98,7 +96,7 @@ final class DefaultManagedAsyncClientConnection implements ManagedAsyncClientCon
 
     @Override
     public boolean isOpen() {
-        return !ioSession.isClosed();
+        return ioSession.isOpen();
     }
 
     @Override
@@ -123,22 +121,18 @@ final class DefaultManagedAsyncClientConnection implements ManagedAsyncClientCon
 
     @Override
     public EndpointDetails getEndpointDetails() {
-        if (ioSession instanceof ProtocolLayer) {
-            final IOEventHandler handler = ((ProtocolLayer) ioSession).getHandler();
-            if (handler instanceof HttpConnection) {
-                return ((HttpConnection) handler).getEndpointDetails();
-            }
+        final IOEventHandler handler = ioSession.getHandler();
+        if (handler instanceof HttpConnection) {
+            return ((HttpConnection) handler).getEndpointDetails();
         }
         return null;
     }
 
     @Override
     public ProtocolVersion getProtocolVersion() {
-        if (ioSession instanceof ProtocolLayer) {
-            final IOEventHandler handler = ((ProtocolLayer) ioSession).getHandler();
-            if (handler instanceof HttpConnection) {
-                return ((HttpConnection) handler).getProtocolVersion();
-            }
+        final IOEventHandler handler = ioSession.getHandler();
+        if (handler instanceof HttpConnection) {
+            return ((HttpConnection) handler).getProtocolVersion();
         }
         return HttpVersion.DEFAULT;
     }
@@ -151,8 +145,8 @@ final class DefaultManagedAsyncClientConnection implements ManagedAsyncClientCon
             final SSLSessionInitializer initializer,
             final SSLSessionVerifier verifier,
             final Timeout handshakeTimeout) throws UnsupportedOperationException {
-        if (log.isDebugEnabled()) {
-            log.debug(getId() + ": start TLS");
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} start TLS", getId());
         }
         if (ioSession instanceof TransportSecurityLayer) {
             ((TransportSecurityLayer) ioSession).startTls(sslContext, endpoint, sslBufferMode, initializer, verifier,
@@ -175,8 +169,8 @@ final class DefaultManagedAsyncClientConnection implements ManagedAsyncClientCon
 
     @Override
     public void submitCommand(final Command command, final Command.Priority priority) {
-        if (log.isDebugEnabled()) {
-            log.debug(getId() + ": " + command.getClass().getSimpleName() + " with " + priority + " priority");
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} {} with {} priority", getId(), command.getClass().getSimpleName(), priority);
         }
         ioSession.enqueue(command, Command.Priority.IMMEDIATE);
     }

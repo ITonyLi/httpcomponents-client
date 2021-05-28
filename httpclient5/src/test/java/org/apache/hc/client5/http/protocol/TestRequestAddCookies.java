@@ -31,16 +31,16 @@ import java.util.Date;
 import org.apache.hc.client5.http.HttpRoute;
 import org.apache.hc.client5.http.RouteInfo.LayerType;
 import org.apache.hc.client5.http.RouteInfo.TunnelType;
-import org.apache.hc.client5.http.cookie.CookieSpecs;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.cookie.BasicCookieStore;
 import org.apache.hc.client5.http.cookie.CookieOrigin;
 import org.apache.hc.client5.http.cookie.CookieSpec;
-import org.apache.hc.client5.http.cookie.CookieSpecProvider;
+import org.apache.hc.client5.http.cookie.CookieSpecFactory;
 import org.apache.hc.client5.http.cookie.CookieStore;
+import org.apache.hc.client5.http.cookie.StandardCookieSpec;
 import org.apache.hc.client5.http.impl.cookie.BasicClientCookie;
-import org.apache.hc.client5.http.impl.cookie.IgnoreSpecProvider;
-import org.apache.hc.client5.http.impl.cookie.RFC6265CookieSpecProvider;
+import org.apache.hc.client5.http.impl.cookie.IgnoreCookieSpecFactory;
+import org.apache.hc.client5.http.impl.cookie.RFC6265CookieSpecFactory;
 import org.apache.hc.client5.http.impl.cookie.RFC6265StrictSpec;
 import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.HttpHost;
@@ -60,7 +60,7 @@ public class TestRequestAddCookies {
 
     private HttpHost target;
     private CookieStore cookieStore;
-    private Lookup<CookieSpecProvider> cookieSpecRegistry;
+    private Lookup<CookieSpecFactory> cookieSpecRegistry;
 
     @Before
     public void setUp() {
@@ -75,27 +75,29 @@ public class TestRequestAddCookies {
         cookie2.setPath("/");
         this.cookieStore.addCookie(cookie2);
 
-        this.cookieSpecRegistry = RegistryBuilder.<CookieSpecProvider>create()
-            .register(CookieSpecs.STANDARD.ident, new RFC6265CookieSpecProvider(
-                    RFC6265CookieSpecProvider.CompatibilityLevel.RELAXED, null))
-            .register(CookieSpecs.STANDARD_STRICT.ident,  new RFC6265CookieSpecProvider(
-                    RFC6265CookieSpecProvider.CompatibilityLevel.STRICT, null))
-            .register(CookieSpecs.IGNORE_COOKIES.ident, new IgnoreSpecProvider())
+        this.cookieSpecRegistry = RegistryBuilder.<CookieSpecFactory>create()
+            .register(StandardCookieSpec.RELAXED, new RFC6265CookieSpecFactory(
+                    RFC6265CookieSpecFactory.CompatibilityLevel.RELAXED, null))
+            .register(StandardCookieSpec.STRICT,  new RFC6265CookieSpecFactory(
+                    RFC6265CookieSpecFactory.CompatibilityLevel.STRICT, null))
+            .register(StandardCookieSpec.IGNORE, new IgnoreCookieSpecFactory())
             .build();
     }
 
-    @Test(expected=IllegalArgumentException.class)
+    @Test
     public void testRequestParameterCheck() throws Exception {
         final HttpClientContext context = HttpClientContext.create();
         final HttpRequestInterceptor interceptor = new RequestAddCookies();
-        interceptor.process(null, null, context);
+        Assert.assertThrows(NullPointerException.class, () ->
+                interceptor.process(null, null, context));
     }
 
-    @Test(expected=IllegalArgumentException.class)
+    @Test
     public void testContextParameterCheck() throws Exception {
         final HttpRequest request = new BasicHttpRequest("GET", "/");
         final HttpRequestInterceptor interceptor = new RequestAddCookies();
-        interceptor.process(request, null, null);
+        Assert.assertThrows(NullPointerException.class, () ->
+                interceptor.process(request, null, null));
     }
 
     @Test
@@ -203,7 +205,7 @@ public class TestRequestAddCookies {
     public void testAddCookiesUsingExplicitCookieSpec() throws Exception {
         final HttpRequest request = new BasicHttpRequest("GET", "/");
         final RequestConfig config = RequestConfig.custom()
-                .setCookieSpec(CookieSpecs.STANDARD_STRICT.ident)
+                .setCookieSpec(StandardCookieSpec.STRICT)
                 .build();
         final HttpRoute route = new HttpRoute(this.target, null, false);
 
@@ -344,7 +346,7 @@ public class TestRequestAddCookies {
         Assert.assertEquals(1, headers.length);
         Assert.assertEquals("name1=value1; name2=value2", headers[0].getValue());
 
-        Mockito.verify(this.cookieStore, Mockito.times(1)).clearExpired(ArgumentMatchers.<Date>any());
+        Mockito.verify(this.cookieStore, Mockito.times(1)).clearExpired(ArgumentMatchers.any());
     }
 
     @Test

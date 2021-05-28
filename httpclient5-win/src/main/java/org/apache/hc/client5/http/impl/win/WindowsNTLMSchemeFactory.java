@@ -28,22 +28,27 @@
 package org.apache.hc.client5.http.impl.win;
 
 import org.apache.hc.client5.http.auth.AuthScheme;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
-import org.apache.hc.client5.http.auth.AuthSchemes;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.core5.annotation.Contract;
 import org.apache.hc.core5.annotation.Experimental;
 import org.apache.hc.core5.annotation.ThreadingBehavior;
 import org.apache.hc.core5.http.protocol.HttpContext;
 
 /**
- * {@link AuthSchemeProvider} implementation that creates and initializes
+ * {@link AuthSchemeFactory} implementation that creates and initializes
  * {@link WindowsNegotiateScheme} using JNA to implement NTLM
  *
  * @since 4.4
  */
 @Contract(threading = ThreadingBehavior.STATELESS)
 @Experimental
-public class WindowsNTLMSchemeFactory implements AuthSchemeProvider {
+public class WindowsNTLMSchemeFactory implements AuthSchemeFactory {
+
+    /**
+     * Singleton instance with a null name.
+     */
+    public static final WindowsNTLMSchemeFactory DEFAULT = new WindowsNTLMSchemeFactory(null);
 
     private final String servicePrincipalName;
 
@@ -54,7 +59,7 @@ public class WindowsNTLMSchemeFactory implements AuthSchemeProvider {
 
     @Override
     public AuthScheme create(final HttpContext context) {
-        return new WindowsNegotiateScheme(AuthSchemes.NTLM.ident, servicePrincipalName);
+        return new WindowsNegotiateScheme(StandardAuthScheme.NTLM, servicePrincipalName);
     }
 
 }

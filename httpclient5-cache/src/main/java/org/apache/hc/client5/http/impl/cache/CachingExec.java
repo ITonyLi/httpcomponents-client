@@ -45,12 +45,12 @@ import org.apache.hc.client5.http.cache.ResourceIOException;
 import org.apache.hc.client5.http.classic.ExecChain;
 import org.apache.hc.client5.http.classic.ExecChainHandler;
 import org.apache.hc.client5.http.impl.ExecSupport;
-import org.apache.hc.client5.http.impl.classic.ClassicRequestCopier;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.client5.http.schedule.SchedulingStrategy;
 import org.apache.hc.client5.http.utils.DateUtils;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.HttpException;
@@ -62,6 +62,7 @@ import org.apache.hc.core5.http.HttpVersion;
 import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.apache.hc.core5.http.message.BasicClassicHttpResponse;
 import org.apache.hc.core5.http.protocol.HttpCoreContext;
 import org.apache.hc.core5.net.URIAuthority;
@@ -104,13 +105,14 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
     private final DefaultCacheRevalidator cacheRevalidator;
     private final ConditionalRequestBuilder<ClassicHttpRequest> conditionalRequestBuilder;
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(CachingExec.class);
 
     CachingExec(final HttpCache cache, final DefaultCacheRevalidator cacheRevalidator, final CacheConfig config) {
         super(config);
         this.responseCache = Args.notNull(cache, "Response cache");
         this.cacheRevalidator = cacheRevalidator;
-        this.conditionalRequestBuilder = new ConditionalRequestBuilder<>(ClassicRequestCopier.INSTANCE);
+        this.conditionalRequestBuilder = new ConditionalRequestBuilder<>(classicHttpRequest ->
+                    ClassicRequestBuilder.copy(classicHttpRequest).build());
     }
 
     CachingExec(
@@ -186,14 +188,14 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
         request.addHeader("Via",via);
 
         if (!cacheableRequestPolicy.isServableFromCache(request)) {
-            log.debug("Request is not servable from cache");
+            LOG.debug("Request is not servable from cache");
             responseCache.flushCacheEntriesInvalidatedByRequest(target, request);
             return callBackend(target, request, scope, chain);
         }
 
         final HttpCacheEntry entry = responseCache.getCacheEntry(target, request);
         if (entry == null) {
-            log.debug("Cache miss");
+            LOG.debug("Cache miss");
             return handleCacheMiss(target, request, scope, chain);
         } else {
             return handleCacheHit(target, request, scope, chain, entry);
@@ -211,10 +213,13 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
         response.setVersion(cacheResponse.getVersion() != null ? cacheResponse.getVersion() : HttpVersion.DEFAULT);
         final SimpleBody body = cacheResponse.getBody();
         if (body != null) {
+            final ContentType contentType = body.getContentType();
+            final Header h = response.getFirstHeader(HttpHeaders.CONTENT_ENCODING);
+            final String contentEncoding = h != null ? h.getValue() : null;
             if (body.isText()) {
-                response.setEntity(new StringEntity(body.getBodyText(), body.getContentType()));
+                response.setEntity(new StringEntity(body.getBodyText(), contentType, contentEncoding, false));
             } else {
-                response.setEntity(new ByteArrayEntity(body.getBodyBytes(), body.getContentType()));
+                response.setEntity(new ByteArrayEntity(body.getBodyBytes(), contentType, contentEncoding, false));
             }
         }
         scope.clientContext.setAttribute(HttpCoreContext.HTTP_RESPONSE, response);
@@ -229,7 +234,7 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
 
         final Date requestDate = getCurrentDate();
 
-        log.debug("Calling the backend");
+        LOG.debug("Calling the backend");
         final ClassicHttpResponse backendResponse = chain.proceed(request, scope);
         try {
             backendResponse.addHeader("Via", generateViaHeader(backendResponse));
@@ -251,7 +256,7 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
         recordCacheHit(target, request);
         final Date now = getCurrentDate();
         if (suitabilityChecker.canCachedResponseBeUsed(target, request, entry, now)) {
-            log.debug("Cache hit");
+            LOG.debug("Cache hit");
             try {
                 return convert(generateCachedResponse(request, context, entry, now), scope);
             } catch (final ResourceIOException ex) {
@@ -263,15 +268,15 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
                 return chain.proceed(request, scope);
             }
         } else if (!mayCallBackend(request)) {
-            log.debug("Cache entry not suitable but only-if-cached requested");
+            LOG.debug("Cache entry not suitable but only-if-cached requested");
             return convert(generateGatewayTimeout(context), scope);
         } else if (!(entry.getStatus() == HttpStatus.SC_NOT_MODIFIED && !suitabilityChecker.isConditional(request))) {
-            log.debug("Revalidating cache entry");
+            LOG.debug("Revalidating cache entry");
             try {
                 if (cacheRevalidator != null
                         && !staleResponseNotAllowed(request, entry, now)
                         && validityPolicy.mayReturnStaleWhileRevalidating(entry, now)) {
-                    log.debug("Serving stale with asynchronous revalidation");
+                    LOG.debug("Serving stale with asynchronous revalidation");
                     final String exchangeId = ExecSupport.getNextExchangeId();
                     final ExecChain.Scope fork = new ExecChain.Scope(
                             exchangeId,
@@ -282,14 +287,7 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
                     final SimpleHttpResponse response = generateCachedResponse(request, context, entry, now);
                     cacheRevalidator.revalidateCacheEntry(
                             responseCache.generateKey(target, request, entry),
-                            new DefaultCacheRevalidator.RevalidationCall() {
-
-                        @Override
-                        public ClassicHttpResponse execute() throws HttpException, IOException {
-                            return revalidateCacheEntry(target, request, fork, chain, entry);
-                        }
-
-                    });
+                            () -> revalidateCacheEntry(target, request, fork, chain, entry));
                     return convert(response, scope);
                 }
                 return revalidateCacheEntry(target, request, scope, chain, entry);
@@ -297,7 +295,7 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
                 return convert(handleRevalidationFailure(request, context, entry, now), scope);
             }
         } else {
-            log.debug("Cache entry not usable; calling backend");
+            LOG.debug("Cache entry not usable; calling backend");
             return callBackend(target, request, scope, chain);
         }
     }
@@ -376,7 +374,7 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
             storeRequestIfModifiedSinceFor304Response(request, backendResponse);
             return cacheAndReturnResponse(target, request, backendResponse, scope, requestDate, responseDate);
         }
-        log.debug("Backend response is not cacheable");
+        LOG.debug("Backend response is not cacheable");
         responseCache.flushCacheEntriesFor(target, request);
         return backendResponse;
     }
@@ -388,7 +386,7 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
             final ExecChain.Scope scope,
             final Date requestSent,
             final Date responseReceived) throws IOException {
-        log.debug("Caching backend response");
+        LOG.debug("Caching backend response");
         final ByteArrayBuffer buf;
         final HttpEntity entity = backendResponse.getEntity();
         if (entity != null) {
@@ -401,7 +399,7 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
                 buf.append(tmp, 0, l);
                 total += l;
                 if (total > cacheConfig.getMaxObjectSize()) {
-                    log.debug("Backend response content length exceeds maximum");
+                    LOG.debug("Backend response content length exceeds maximum");
                     backendResponse.setEntity(new CombinedEntity(entity, buf));
                     return backendResponse;
                 }
@@ -415,15 +413,15 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
         if (cacheConfig.isFreshnessCheckEnabled()) {
             final HttpCacheEntry existingEntry = responseCache.getCacheEntry(target, request);
             if (DateUtils.isAfter(existingEntry, backendResponse, HttpHeaders.DATE)) {
-                log.debug("Backend already contains fresher cache entry");
+                LOG.debug("Backend already contains fresher cache entry");
                 cacheEntry = existingEntry;
             } else {
                 cacheEntry = responseCache.createCacheEntry(target, request, backendResponse, buf, requestSent, responseReceived);
-                log.debug("Backend response successfully cached");
+                LOG.debug("Backend response successfully cached");
             }
         } else {
             cacheEntry = responseCache.createCacheEntry(target, request, backendResponse, buf, requestSent, responseReceived);
-            log.debug("Backend response successfully cached (freshness check skipped)");
+            LOG.debug("Backend response successfully cached (freshness check skipped)");
         }
         return convert(responseGenerator.generateResponse(request, cacheEntry), scope);
     }
@@ -468,7 +466,7 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
 
             final Header resultEtagHeader = backendResponse.getFirstHeader(HeaderConstants.ETAG);
             if (resultEtagHeader == null) {
-                log.warn("304 response did not contain ETag");
+                LOG.warn("304 response did not contain ETag");
                 EntityUtils.consume(backendResponse.getEntity());
                 backendResponse.close();
                 return callBackend(target, request, scope, chain);
@@ -477,7 +475,7 @@ class CachingExec extends CachingExecBase implements ExecChainHandler {
             final String resultEtag = resultEtagHeader.getValue();
             final Variant matchingVariant = variants.get(resultEtag);
             if (matchingVariant == null) {
-                log.debug("304 response did not contain ETag matching one sent in If-None-Match");
+                LOG.debug("304 response did not contain ETag matching one sent in If-None-Match");
                 EntityUtils.consume(backendResponse.getEntity());
                 backendResponse.close();
                 return callBackend(target, request, scope, chain);

@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.HttpRoute;
 import org.apache.hc.client5.http.SchemePortResolver;
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.impl.ConnPoolSupport;
 import org.apache.hc.client5.http.impl.ConnectionShutdownException;
 import org.apache.hc.client5.http.nio.AsyncClientConnectionManager;
@@ -49,7 +50,7 @@ import org.apache.hc.core5.annotation.Internal;
 import org.apache.hc.core5.annotation.ThreadingBehavior;
 import org.apache.hc.core5.concurrent.ComplexFuture;
 import org.apache.hc.core5.concurrent.FutureCallback;
-import org.apache.hc.core5.function.Callback;
+import org.apache.hc.core5.function.Resolver;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.HttpVersion;
 import org.apache.hc.core5.http.ProtocolVersion;
@@ -103,7 +104,7 @@ import org.slf4j.LoggerFactory;
 @Contract(threading = ThreadingBehavior.SAFE_CONDITIONAL)
 public class PoolingAsyncClientConnectionManager implements AsyncClientConnectionManager, ConnPoolControl<HttpRoute> {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(PoolingAsyncClientConnectionManager.class);
 
     public static final int DEFAULT_MAX_TOTAL_CONNECTIONS = 25;
     public static final int DEFAULT_MAX_CONNECTIONS_PER_ROUTE = 5;
@@ -112,7 +113,7 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
     private final AsyncClientConnectionOperator connectionOperator;
     private final AtomicBoolean closed;
 
-    private volatile TimeValue validateAfterInactivity;
+    private volatile Resolver<HttpRoute, ConnectionConfig> connectionConfigResolver;
 
     public PoolingAsyncClientConnectionManager() {
         this(RegistryBuilder.<TlsStrategy>create()
@@ -121,7 +122,7 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
     }
 
     public PoolingAsyncClientConnectionManager(final Lookup<TlsStrategy> tlsStrategyLookup) {
-        this(tlsStrategyLookup, PoolConcurrencyPolicy.STRICT, TimeValue.NEG_ONE_MILLISECONDS);
+        this(tlsStrategyLookup, PoolConcurrencyPolicy.STRICT, TimeValue.NEG_ONE_MILLISECOND);
     }
 
     public PoolingAsyncClientConnectionManager(
@@ -196,11 +197,11 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
     @Override
     public void close(final CloseMode closeMode) {
         if (this.closed.compareAndSet(false, true)) {
-            if (this.log.isDebugEnabled()) {
-                this.log.debug("Shutdown connection pool " + closeMode);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Shutdown connection pool {}", closeMode);
             }
             this.pool.close(closeMode);
-            this.log.debug("Connection pool shut down");
+            LOG.debug("Connection pool shut down");
         }
     }
 
@@ -211,6 +212,12 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
         throw new IllegalStateException("Unexpected endpoint class: " + endpoint.getClass());
     }
 
+    private ConnectionConfig resolveConnectionConfig(final HttpRoute route) {
+        final Resolver<HttpRoute, ConnectionConfig> resolver = this.connectionConfigResolver;
+        final ConnectionConfig connectionConfig = resolver != null ? resolver.resolve(route) : null;
+        return connectionConfig != null ? connectionConfig : ConnectionConfig.DEFAULT;
+    }
+
     @Override
     public Future<AsyncConnectionEndpoint> lease(
             final String id,
@@ -218,11 +225,11 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
             final Object state,
             final Timeout requestTimeout,
             final FutureCallback<AsyncConnectionEndpoint> callback) {
-        if (log.isDebugEnabled()) {
-            log.debug(id + ": endpoint lease request (" + requestTimeout + ") " +
-                    ConnPoolSupport.formatStats(route, state, pool));
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} endpoint lease request ({}) {}", id, requestTimeout, ConnPoolSupport.formatStats(route, state, pool));
         }
         final ComplexFuture<AsyncConnectionEndpoint> resultFuture = new ComplexFuture<>(callback);
+        final ConnectionConfig connectionConfig = resolveConnectionConfig(route);
         final Future<PoolEntry<HttpRoute, ManagedAsyncClientConnection>> leaseFuture = pool.lease(
                 route, state, requestTimeout, new FutureCallback<PoolEntry<HttpRoute, ManagedAsyncClientConnection>>() {
 
@@ -231,12 +238,12 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
                         if (connection != null) {
                             connection.activate();
                         }
-                        if (log.isDebugEnabled()) {
-                            log.debug(id + ": endpoint leased " + ConnPoolSupport.formatStats(route, state, pool));
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("{} endpoint leased {}", id, ConnPoolSupport.formatStats(route, state, pool));
                         }
                         final AsyncConnectionEndpoint endpoint = new InternalConnectionEndpoint(poolEntry);
-                        if (log.isDebugEnabled()) {
-                            log.debug(id + ": acquired " + ConnPoolSupport.getId(endpoint));
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("{} acquired {}", id, ConnPoolSupport.getId(endpoint));
                         }
                         resultFuture.completed(endpoint);
                     }
@@ -244,51 +251,41 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
                     @Override
                     public void completed(final PoolEntry<HttpRoute, ManagedAsyncClientConnection> poolEntry) {
                         final ManagedAsyncClientConnection connection = poolEntry.getConnection();
-                        final TimeValue timeValue = PoolingAsyncClientConnectionManager.this.validateAfterInactivity;
-                        if (TimeValue.isPositive(timeValue) && connection != null &&
-                                poolEntry.getUpdated() + timeValue.toMillis() <= System.currentTimeMillis()) {
+                        final TimeValue timeValue = connectionConfig != null ? connectionConfig.getValidateAfterInactivity() : null;
+                        if (TimeValue.isNonNegative(timeValue) && connection != null &&
+                                poolEntry.getUpdated() + timeValue.toMilliseconds() <= System.currentTimeMillis()) {
                             final ProtocolVersion protocolVersion = connection.getProtocolVersion();
-                            if (HttpVersion.HTTP_2_0.greaterEquals(protocolVersion)) {
-                                connection.submitCommand(new PingCommand(new BasicPingHandler(new Callback<Boolean>() {
-
-                                    @Override
-                                    public void execute(final Boolean result) {
-                                        if (result == Boolean.FALSE) {
-                                            if (log.isDebugEnabled()) {
-                                                log.debug(id + ": connection " + ConnPoolSupport.getId(connection) + " is stale");
-                                            }
-                                            poolEntry.discardConnection(CloseMode.IMMEDIATE);
+                            if (protocolVersion != null && protocolVersion.greaterEquals(HttpVersion.HTTP_2_0)) {
+                                connection.submitCommand(new PingCommand(new BasicPingHandler(result -> {
+                                    if (result == null || !result)  {
+                                        if (LOG.isDebugEnabled()) {
+                                            LOG.debug("{} connection {} is stale", id, ConnPoolSupport.getId(connection));
                                         }
-                                        leaseCompleted(poolEntry);
+                                        poolEntry.discardConnection(CloseMode.IMMEDIATE);
                                     }
-
                                 })), Command.Priority.IMMEDIATE);
                             } else {
-                                if (!connection.isOpen()) {
-                                    if (log.isDebugEnabled()) {
-                                        log.debug(id + ": connection " + ConnPoolSupport.getId(connection) + " is closed");
-                                    }
-                                    poolEntry.discardConnection(CloseMode.IMMEDIATE);
+                                if (LOG.isDebugEnabled()) {
+                                    LOG.debug("{} connection {} is closed", id, ConnPoolSupport.getId(connection));
                                 }
-                                leaseCompleted(poolEntry);
+                                poolEntry.discardConnection(CloseMode.IMMEDIATE);
                             }
-                        } else {
-                            leaseCompleted(poolEntry);
                         }
+                        leaseCompleted(poolEntry);
                     }
 
                     @Override
                     public void failed(final Exception ex) {
-                        if (log.isDebugEnabled()) {
-                            log.debug(id + ": endpoint lease failed");
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("{} endpoint lease failed", id);
                         }
                         resultFuture.failed(ex);
                     }
 
                     @Override
                     public void cancelled() {
-                        if (log.isDebugEnabled()) {
-                            log.debug(id + ": endpoint lease cancelled");
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("{} endpoint lease cancelled", id);
                         }
                         resultFuture.cancel();
                     }
@@ -307,8 +304,8 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
         if (entry == null) {
             return;
         }
-        if (log.isDebugEnabled()) {
-            log.debug(ConnPoolSupport.getId(endpoint) + ": releasing endpoint");
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} releasing endpoint", ConnPoolSupport.getId(endpoint));
         }
         final ManagedAsyncClientConnection connection = entry.getConnection();
         boolean reusable = connection != null && connection.isOpen();
@@ -317,15 +314,14 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
                 entry.updateState(state);
                 entry.updateExpiry(keepAlive);
                 connection.passivate();
-                if (log.isDebugEnabled()) {
+                if (LOG.isDebugEnabled()) {
                     final String s;
                     if (TimeValue.isPositive(keepAlive)) {
                         s = "for " + keepAlive;
                     } else {
                         s = "indefinitely";
                     }
-                    log.debug(ConnPoolSupport.getId(endpoint) + ": connection " + ConnPoolSupport.getId(connection) +
-                            " can be kept alive " + s);
+                    LOG.debug("{} connection {} can be kept alive {}", ConnPoolSupport.getId(endpoint), ConnPoolSupport.getId(connection), s);
                 }
             }
         } catch (final RuntimeException ex) {
@@ -333,9 +329,8 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
             throw ex;
         } finally {
             pool.release(entry, reusable);
-            if (log.isDebugEnabled()) {
-                log.debug(ConnPoolSupport.getId(endpoint) + ": connection released " +
-                        ConnPoolSupport.formatStats(entry.getRoute(), entry.getState(), pool));
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} connection released {}", ConnPoolSupport.getId(endpoint), ConnPoolSupport.formatStats(entry.getRoute(), entry.getState(), pool));
             }
         }
     }
@@ -344,13 +339,12 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
     public Future<AsyncConnectionEndpoint> connect(
             final AsyncConnectionEndpoint endpoint,
             final ConnectionInitiator connectionInitiator,
-            final Timeout connectTimeout,
+            final Timeout timeout,
             final Object attachment,
             final HttpContext context,
             final FutureCallback<AsyncConnectionEndpoint> callback) {
         Args.notNull(endpoint, "Endpoint");
         Args.notNull(connectionInitiator, "Connection initiator");
-        Args.notNull(connectTimeout, "Timeout");
         final InternalConnectionEndpoint internalEndpoint = cast(endpoint);
         final ComplexFuture<AsyncConnectionEndpoint> resultFuture = new ComplexFuture<>(callback);
         if (internalEndpoint.isConnected()) {
@@ -366,8 +360,11 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
             host = route.getTargetHost();
         }
         final InetSocketAddress localAddress = route.getLocalSocketAddress();
-        if (this.log.isDebugEnabled()) {
-            log.debug(ConnPoolSupport.getId(endpoint) + ": connecting endpoint to " + host + " (" + connectTimeout + ")");
+        final ConnectionConfig connectionConfig = resolveConnectionConfig(route);
+        final Timeout connectTimeout = timeout != null ? timeout : connectionConfig.getConnectTimeout();
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} connecting endpoint to {} ({})", ConnPoolSupport.getId(endpoint), host, connectTimeout);
         }
         final Future<ManagedAsyncClientConnection> connectFuture = connectionOperator.connect(
                 connectionInitiator, host, localAddress, connectTimeout, attachment, new FutureCallback<ManagedAsyncClientConnection>() {
@@ -375,8 +372,12 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
                     @Override
                     public void completed(final ManagedAsyncClientConnection connection) {
                         try {
-                            if (log.isDebugEnabled()) {
-                                log.debug(ConnPoolSupport.getId(endpoint) + ": connected " + ConnPoolSupport.getId(connection));
+                            if (LOG.isDebugEnabled()) {
+                                LOG.debug("{} connected {}", ConnPoolSupport.getId(endpoint), ConnPoolSupport.getId(connection));
+                            }
+                            final Timeout socketTimeout = connectionConfig.getSocketTimeout();
+                            if (socketTimeout != null) {
+                                connection.setSocketTimeout(socketTimeout);
                             }
                             poolEntry.assignConnection(connection);
                             resultFuture.completed(internalEndpoint);
@@ -411,8 +412,8 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
         final HttpRoute route = poolEntry.getRoute();
         final ManagedAsyncClientConnection connection = poolEntry.getConnection();
         connectionOperator.upgrade(poolEntry.getConnection(), route.getTargetHost(), attachment);
-        if (log.isDebugEnabled()) {
-            log.debug(ConnPoolSupport.getId(internalEndpoint) + ": upgraded " + ConnPoolSupport.getId(connection));
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} upgraded {}", ConnPoolSupport.getId(internalEndpoint), ConnPoolSupport.getId(connection));
         }
     }
 
@@ -471,19 +472,46 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
         return pool.getStats(route);
     }
 
-    public TimeValue getValidateAfterInactivity() {
-        return validateAfterInactivity;
+    /**
+     * Sets the same {@link ConnectionConfig} for all routes
+     *
+     * @since 5.2
+     */
+    public void setDefaultConnectionConfig(final ConnectionConfig config) {
+        this.connectionConfigResolver = (route) -> config;
     }
 
     /**
-     * Defines period of inactivity in milliseconds after which persistent connections must
-     * be re-validated prior to being {@link #lease(String, HttpRoute, Object, Timeout,
-     * FutureCallback)} leased} to the consumer. Non-positive value passed
-     * to this method disables connection validation. This check helps detect connections
-     * that have become stale (half-closed) while kept inactive in the pool.
+     * Sets {@link Resolver} of {@link ConnectionConfig} on a per route basis.
+     *
+     * @since 5.2
      */
+    public void setConnectionConfigResolver(final Resolver<HttpRoute, ConnectionConfig> connectionConfigResolver) {
+        this.connectionConfigResolver = connectionConfigResolver;
+    }
+
+    /**
+     * @deprecated Use custom {@link #setConnectionConfigResolver(Resolver)}
+     */
+    @Deprecated
+    public TimeValue getValidateAfterInactivity() {
+        return ConnectionConfig.DEFAULT.getValidateAfterInactivity();
+    }
+
+    /**
+     * Defines period of inactivity after which persistent connections must
+     * be re-validated prior to being {@link #lease(String, HttpRoute, Object, Timeout,
+     * FutureCallback)} leased} to the consumer. Negative values passed
+     * to this method disable connection validation. This check helps detect connections
+     * that have become stale (half-closed) while kept inactive in the pool.
+     *
+     * @deprecated Use {@link #setConnectionConfigResolver(Resolver)}.
+     */
+    @Deprecated
     public void setValidateAfterInactivity(final TimeValue validateAfterInactivity) {
-        this.validateAfterInactivity = validateAfterInactivity;
+        setDefaultConnectionConfig(ConnectionConfig.custom()
+                .setValidateAfterInactivity(validateAfterInactivity)
+                .build());
     }
 
     private static final AtomicLong COUNT = new AtomicLong(0);
@@ -495,7 +523,7 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
 
         InternalConnectionEndpoint(final PoolEntry<HttpRoute, ManagedAsyncClientConnection> poolEntry) {
             this.poolEntryRef = new AtomicReference<>(poolEntry);
-            this.id = String.format("ep-%08X", COUNT.getAndIncrement());
+            this.id = String.format("ep-%010d", COUNT.getAndIncrement());
         }
 
         @Override
@@ -526,8 +554,8 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
         public void close(final CloseMode closeMode) {
             final PoolEntry<HttpRoute, ManagedAsyncClientConnection> poolEntry = poolEntryRef.get();
             if (poolEntry != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug(id + ": close " + closeMode);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("{} close {}", id, closeMode);
                 }
                 poolEntry.discardConnection(closeMode);
             }
@@ -562,8 +590,8 @@ public class PoolingAsyncClientConnectionManager implements AsyncClientConnectio
                 final HandlerFactory<AsyncPushConsumer> pushHandlerFactory,
                 final HttpContext context) {
             final ManagedAsyncClientConnection connection = getValidatedPoolEntry().getConnection();
-            if (log.isDebugEnabled()) {
-                log.debug(id + ": executing exchange " + exchangeId + " over " + ConnPoolSupport.getId(connection));
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("{} executing exchange {} over {}", id, exchangeId, ConnPoolSupport.getId(connection));
             }
             connection.submitCommand(
                     new RequestExecutionCommand(exchangeHandler, pushHandlerFactory, context),

@@ -28,8 +28,8 @@ package org.apache.hc.client5.http.impl.win;
 
 import java.util.Locale;
 
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
-import org.apache.hc.client5.http.auth.AuthSchemes;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.impl.auth.BasicSchemeFactory;
 import org.apache.hc.client5.http.impl.auth.DigestSchemeFactory;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
@@ -57,8 +57,8 @@ public class WinHttpClients {
         if (os != null && os.contains("windows")) {
             try {
                 return Sspi.MAX_TOKEN_SIZE > 0;
-            } catch (final Exception ignore) { // Likely ClassNotFound
-                return false;
+            } catch (final Exception ignore) {
+                // Likely ClassNotFound
             }
         }
         return false;
@@ -66,11 +66,11 @@ public class WinHttpClients {
 
     private static HttpClientBuilder createBuilder() {
         if (isWinAuthAvailable()) {
-            final Registry<AuthSchemeProvider> authSchemeRegistry = RegistryBuilder.<AuthSchemeProvider>create()
-                    .register(AuthSchemes.BASIC.ident, new BasicSchemeFactory())
-                    .register(AuthSchemes.DIGEST.ident, new DigestSchemeFactory())
-                    .register(AuthSchemes.NTLM.ident, new WindowsNTLMSchemeFactory(null))
-                    .register(AuthSchemes.SPNEGO.ident, new WindowsNegotiateSchemeFactory(null))
+            final Registry<AuthSchemeFactory> authSchemeRegistry = RegistryBuilder.<AuthSchemeFactory>create()
+                    .register(StandardAuthScheme.BASIC, BasicSchemeFactory.INSTANCE)
+                    .register(StandardAuthScheme.DIGEST, DigestSchemeFactory.INSTANCE)
+                    .register(StandardAuthScheme.NTLM, WindowsNTLMSchemeFactory.DEFAULT)
+                    .register(StandardAuthScheme.SPNEGO, WindowsNegotiateSchemeFactory.DEFAULT)
                     .build();
             return HttpClientBuilder.create()
                     .setDefaultAuthSchemeRegistry(authSchemeRegistry);

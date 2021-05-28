@@ -50,13 +50,14 @@ import org.apache.hc.core5.util.TimeValue;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.stubbing.Answer;
 
 @SuppressWarnings({"boxing","static-access"}) // test code
+@RunWith(MockitoJUnitRunner.class)
 public class TestMainClientExec {
 
     @Mock
@@ -75,7 +76,6 @@ public class TestMainClientExec {
 
     @Before
     public void setup() throws Exception {
-        MockitoAnnotations.initMocks(this);
         mainClientExec = new MainClientExec(connectionManager, reuseStrategy, keepAliveStrategy, userTokenHandler);
         target = new HttpHost("foo", 80);
     }
@@ -90,11 +90,10 @@ public class TestMainClientExec {
                 .setStream(new ByteArrayInputStream(new byte[]{}))
                 .build());
 
-        Mockito.when(endpoint.isEndpointAcquired()).thenReturn(false);
         Mockito.when(endpoint.execute(
                 Mockito.anyString(),
                 Mockito.same(request),
-                Mockito.<HttpClientContext>any())).thenReturn(response);
+                Mockito.any())).thenReturn(response);
         Mockito.when(reuseStrategy.keepAlive(
                 Mockito.same(request),
                 Mockito.same(response),
@@ -119,11 +118,10 @@ public class TestMainClientExec {
         final ClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
         response.setEntity(null);
 
-        Mockito.when(endpoint.isEndpointAcquired()).thenReturn(false);
         Mockito.when(endpoint.execute(
                 Mockito.anyString(),
                 Mockito.same(request),
-                Mockito.<HttpClientContext>any())).thenReturn(response);
+                Mockito.any())).thenReturn(response);
         Mockito.when(reuseStrategy.keepAlive(
                 Mockito.same(request),
                 Mockito.same(response),
@@ -152,12 +150,10 @@ public class TestMainClientExec {
                 .build());
 
         final ConnectionState connectionState = new ConnectionState();
-        Mockito.doAnswer(connectionState.connectAnswer()).when(endpoint).connectEndpoint(Mockito.<HttpClientContext>any());
-        Mockito.when(endpoint.isEndpointConnected()).thenAnswer(connectionState.isConnectedAnswer());
         Mockito.when(endpoint.execute(
                 Mockito.anyString(),
                 Mockito.same(request),
-                Mockito.<HttpClientContext>any())).thenReturn(response);
+                Mockito.any())).thenReturn(response);
         Mockito.when(reuseStrategy.keepAlive(
                 Mockito.same(request),
                 Mockito.same(response),
@@ -184,13 +180,10 @@ public class TestMainClientExec {
         final ClassicHttpRequest request = new HttpGet("http://bar/test");
         final ClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
 
-        final ConnectionState connectionState = new ConnectionState();
-        Mockito.doAnswer(connectionState.connectAnswer()).when(endpoint).connectEndpoint(Mockito.<HttpClientContext>any());
-        Mockito.when(endpoint.isEndpointConnected()).thenAnswer(connectionState.isConnectedAnswer());
         Mockito.when(endpoint.execute(
                 Mockito.anyString(),
                 Mockito.same(request),
-                Mockito.<HttpClientContext>any())).thenReturn(response);
+                Mockito.any())).thenReturn(response);
         Mockito.when(reuseStrategy.keepAlive(
                 Mockito.same(request),
                 Mockito.same(response),
@@ -221,12 +214,10 @@ public class TestMainClientExec {
                 .build());
 
         final ConnectionState connectionState = new ConnectionState();
-        Mockito.doAnswer(connectionState.connectAnswer()).when(endpoint).connectEndpoint(Mockito.<HttpClientContext>any());
-        Mockito.when(endpoint.isEndpointConnected()).thenAnswer(connectionState.isConnectedAnswer());
         Mockito.when(endpoint.execute(
                 Mockito.anyString(),
                 Mockito.same(request),
-                Mockito.<HttpClientContext>any())).thenReturn(response);
+                Mockito.any())).thenReturn(response);
         Mockito.when(reuseStrategy.keepAlive(
                 Mockito.same(request),
                 Mockito.same(response),
@@ -246,7 +237,7 @@ public class TestMainClientExec {
         Mockito.verify(endpoint).discardEndpoint();
     }
 
-    @Test(expected=InterruptedIOException.class)
+    @Test
     public void testExecConnectionShutDown() throws Exception {
         final HttpRoute route = new HttpRoute(target);
         final HttpClientContext context = new HttpClientContext();
@@ -255,18 +246,15 @@ public class TestMainClientExec {
         Mockito.when(endpoint.execute(
                 Mockito.anyString(),
                 Mockito.same(request),
-                Mockito.<HttpClientContext>any())).thenThrow(new ConnectionShutdownException());
+                Mockito.any())).thenThrow(new ConnectionShutdownException());
 
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, endpoint, context);
-        try {
-            mainClientExec.execute(request, scope, null);
-        } catch (final Exception ex) {
-            Mockito.verify(endpoint).discardEndpoint();
-            throw ex;
-        }
+        Assert.assertThrows(InterruptedIOException.class, () ->
+                mainClientExec.execute(request, scope, null));
+        Mockito.verify(endpoint).discardEndpoint();
     }
 
-    @Test(expected=RuntimeException.class)
+    @Test
     public void testExecRuntimeException() throws Exception {
         final HttpRoute route = new HttpRoute(target);
         final HttpClientContext context = new HttpClientContext();
@@ -275,18 +263,15 @@ public class TestMainClientExec {
         Mockito.when(endpoint.execute(
                 Mockito.anyString(),
                 Mockito.same(request),
-                Mockito.<HttpClientContext>any())).thenThrow(new RuntimeException("Ka-boom"));
+                Mockito.any())).thenThrow(new RuntimeException("Ka-boom"));
 
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, endpoint, context);
-        try {
-            mainClientExec.execute(request, scope, null);
-        } catch (final Exception ex) {
-            Mockito.verify(endpoint).discardEndpoint();
-            throw ex;
-        }
+        Assert.assertThrows(RuntimeException.class, () ->
+                mainClientExec.execute(request, scope, null));
+        Mockito.verify(endpoint).discardEndpoint();
     }
 
-    @Test(expected=HttpException.class)
+    @Test
     public void testExecHttpException() throws Exception {
         final HttpRoute route = new HttpRoute(target);
         final HttpClientContext context = new HttpClientContext();
@@ -295,18 +280,15 @@ public class TestMainClientExec {
         Mockito.when(endpoint.execute(
                 Mockito.anyString(),
                 Mockito.same(request),
-                Mockito.<HttpClientContext>any())).thenThrow(new HttpException("Ka-boom"));
+                Mockito.any())).thenThrow(new HttpException("Ka-boom"));
 
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, endpoint, context);
-        try {
-            mainClientExec.execute(request, scope, null);
-        } catch (final Exception ex) {
-            Mockito.verify(endpoint).discardEndpoint();
-            throw ex;
-        }
+        Assert.assertThrows(HttpException.class, () ->
+                mainClientExec.execute(request, scope, null));
+        Mockito.verify(endpoint).discardEndpoint();
     }
 
-    @Test(expected=IOException.class)
+    @Test
     public void testExecIOException() throws Exception {
         final HttpRoute route = new HttpRoute(target);
         final HttpClientContext context = new HttpClientContext();
@@ -315,44 +297,29 @@ public class TestMainClientExec {
         Mockito.when(endpoint.execute(
                 Mockito.anyString(),
                 Mockito.same(request),
-                Mockito.<HttpClientContext>any())).thenThrow(new IOException("Ka-boom"));
+                Mockito.any())).thenThrow(new IOException("Ka-boom"));
 
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, endpoint, context);
-        try {
-            mainClientExec.execute(request, scope, null);
-        } catch (final Exception ex) {
-            Mockito.verify(endpoint).discardEndpoint();
-            throw ex;
-        }
+        Assert.assertThrows(IOException.class, () ->
+                mainClientExec.execute(request, scope, null));
+        Mockito.verify(endpoint).discardEndpoint();
     }
 
     static class ConnectionState {
 
         private boolean connected;
 
-        public Answer connectAnswer() {
+        public Answer<?> connectAnswer() {
 
-            return new Answer() {
-
-                @Override
-                public Object answer(final InvocationOnMock invocationOnMock) throws Throwable {
-                    connected = true;
-                    return null;
-                }
-
+            return invocationOnMock -> {
+                connected = true;
+                return null;
             };
         }
 
         public Answer<Boolean> isConnectedAnswer() {
 
-            return new Answer<Boolean>() {
-
-                @Override
-                public Boolean answer(final InvocationOnMock invocationOnMock) throws Throwable {
-                    return connected;
-                }
-
-            };
+            return invocationOnMock -> connected;
 
         }
     }

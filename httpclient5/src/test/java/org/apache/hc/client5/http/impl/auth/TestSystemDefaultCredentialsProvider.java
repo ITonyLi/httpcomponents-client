@@ -34,6 +34,7 @@ import java.net.URL;
 
 import org.apache.hc.client5.http.auth.AuthScope;
 import org.apache.hc.client5.http.auth.Credentials;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.core5.http.protocol.HttpCoreContext;
 import org.junit.Assert;
@@ -91,7 +92,7 @@ public class TestSystemDefaultCredentialsProvider {
         final AuthenticatorDelegate authenticatorDelegate = installAuthenticator(AUTH1);
 
         final URL httpRequestUrl = new URL(TARGET_SCHEME1, TARGET_HOST1, TARGET_PORT1, "/");
-        final AuthScope authScope = new AuthScope(PROXY_PROTOCOL1, PROXY_HOST1, PROXY_PORT1, PROMPT1, "BASIC");
+        final AuthScope authScope = new AuthScope(PROXY_PROTOCOL1, PROXY_HOST1, PROXY_PORT1, PROMPT1, StandardAuthScheme.BASIC);
         final HttpCoreContext coreContext = new HttpCoreContext();
         coreContext.setAttribute(HttpCoreContext.HTTP_REQUEST, new HttpGet(httpRequestUrl.toURI()));
 
@@ -99,7 +100,7 @@ public class TestSystemDefaultCredentialsProvider {
             new SystemDefaultCredentialsProvider().getCredentials(authScope, coreContext);
 
         Mockito.verify(authenticatorDelegate).getPasswordAuthentication(PROXY_HOST1, null, PROXY_PORT1, PROXY_PROTOCOL1,
-                                                                        PROMPT1, "Basic", httpRequestUrl,
+                                                                        PROMPT1, StandardAuthScheme.BASIC, httpRequestUrl,
                                                                         RequestorType.SERVER);
         Assert.assertNotNull(receivedCredentials);
         Assert.assertEquals(AUTH1.getUserName(), receivedCredentials.getUserPrincipal().getName());
@@ -111,13 +112,13 @@ public class TestSystemDefaultCredentialsProvider {
 
         final AuthenticatorDelegate authenticatorDelegate = installAuthenticator(AUTH1);
 
-        final AuthScope authScope = new AuthScope(PROXY_PROTOCOL1, PROXY_HOST1, PROXY_PORT1, PROMPT1, "BASIC");
+        final AuthScope authScope = new AuthScope(PROXY_PROTOCOL1, PROXY_HOST1, PROXY_PORT1, PROMPT1, StandardAuthScheme.BASIC);
 
         final Credentials receivedCredentials =
             new SystemDefaultCredentialsProvider().getCredentials(authScope, null);
 
         Mockito.verify(authenticatorDelegate).getPasswordAuthentication(PROXY_HOST1, null, PROXY_PORT1, PROXY_PROTOCOL1,
-                                                                        PROMPT1, "Basic", null,
+                                                                        PROMPT1, StandardAuthScheme.BASIC, null,
                                                                         RequestorType.SERVER);
         Assert.assertNotNull(receivedCredentials);
         Assert.assertEquals(AUTH1.getUserName(), receivedCredentials.getUserPrincipal().getName());
@@ -127,10 +128,10 @@ public class TestSystemDefaultCredentialsProvider {
     private AuthenticatorDelegate installAuthenticator(final PasswordAuthentication returedAuthentication) {
         final AuthenticatorDelegate authenticatorDelegate = Mockito.mock(AuthenticatorDelegate.class);
         Mockito.when(authenticatorDelegate.getPasswordAuthentication(ArgumentMatchers.anyString(),
-                                                                     ArgumentMatchers.<InetAddress>any(), ArgumentMatchers.anyInt(),
+                                                                     ArgumentMatchers.any(), ArgumentMatchers.anyInt(),
                                                                      ArgumentMatchers.anyString(), ArgumentMatchers.anyString(),
-                                                                     ArgumentMatchers.anyString(), ArgumentMatchers.<URL>any(),
-                                                                     ArgumentMatchers.<RequestorType>any())).thenReturn(returedAuthentication);
+                                                                     ArgumentMatchers.anyString(), ArgumentMatchers.any(),
+                                                                     ArgumentMatchers.any())).thenReturn(returedAuthentication);
         Authenticator.setDefault(new DelegatedAuthenticator(authenticatorDelegate));
         return authenticatorDelegate;
     }

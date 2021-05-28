@@ -38,6 +38,7 @@ import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.HttpRequest;
 import org.apache.hc.core5.http.HttpStatus;
 import org.apache.hc.core5.http.message.MessageSupport;
+import org.apache.hc.core5.util.TimeValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,12 +48,12 @@ import org.slf4j.LoggerFactory;
  */
 class CachedResponseSuitabilityChecker {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(CachedResponseSuitabilityChecker.class);
 
     private final boolean sharedCache;
     private final boolean useHeuristicCaching;
     private final float heuristicCoefficient;
-    private final long heuristicDefaultLifetime;
+    private final TimeValue heuristicDefaultLifetime;
     private final CacheValidityPolicy validityStrategy;
 
     CachedResponseSuitabilityChecker(final CacheValidityPolicy validityStrategy,
@@ -80,11 +81,11 @@ class CachedResponseSuitabilityChecker {
         if (originInsistsOnFreshness(entry)) {
             return false;
         }
-        final long maxstale = getMaxStale(request);
-        if (maxstale == -1) {
+        final long maxStale = getMaxStale(request);
+        if (maxStale == -1) {
             return false;
         }
-        return (maxstale > validityStrategy.getStalenessSecs(entry, now));
+        return (maxStale > validityStrategy.getStaleness(entry, now).toSeconds());
     }
 
     private boolean originInsistsOnFreshness(final HttpCacheEntry entry) {
@@ -99,30 +100,31 @@ class CachedResponseSuitabilityChecker {
     }
 
     private long getMaxStale(final HttpRequest request) {
-        long maxstale = -1;
+        // This is a header value, we leave as-is
+        long maxStale = -1;
         final Iterator<HeaderElement> it = MessageSupport.iterate(request, HeaderConstants.CACHE_CONTROL);
         while (it.hasNext()) {
             final HeaderElement elt = it.next();
             if (HeaderConstants.CACHE_CONTROL_MAX_STALE.equals(elt.getName())) {
-                if ((elt.getValue() == null || "".equals(elt.getValue().trim())) && maxstale == -1) {
-                    maxstale = Long.MAX_VALUE;
+                if ((elt.getValue() == null || elt.getValue().trim().isEmpty()) && maxStale == -1) {
+                    maxStale = Long.MAX_VALUE;
                 } else {
                     try {
                         long val = Long.parseLong(elt.getValue());
                         if (val < 0) {
                             val = 0;
                         }
-                        if (maxstale == -1 || val < maxstale) {
-                            maxstale = val;
+                        if (maxStale == -1 || val < maxStale) {
+                            maxStale = val;
                         }
                     } catch (final NumberFormatException nfe) {
                         // err on the side of preserving semantic transparency
-                        maxstale = 0;
+                        maxStale = 0;
                     }
                 }
             }
         }
-        return maxstale;
+        return maxStale;
     }
 
     /**
@@ -141,32 +143,32 @@ class CachedResponseSuitabilityChecker {
      */
     public boolean canCachedResponseBeUsed(final HttpHost host, final HttpRequest request, final HttpCacheEntry entry, final Date now) {
         if (!isFreshEnough(entry, request, now)) {
-            log.debug("Cache entry is not fresh enough");
+            LOG.debug("Cache entry is not fresh enough");
             return false;
         }
 
         if (isGet(request) && !validityStrategy.contentLengthHeaderMatchesActualLength(entry)) {
-            log.debug("Cache entry Content-Length and header information do not match");
+            LOG.debug("Cache entry Content-Length and header information do not match");
             return false;
         }
 
         if (hasUnsupportedConditionalHeaders(request)) {
-            log.debug("Request contains unsupported conditional headers");
+            LOG.debug("Request contains unsupported conditional headers");
             return false;
         }
 
         if (!isConditional(request) && entry.getStatus() == HttpStatus.SC_NOT_MODIFIED) {
-            log.debug("Unconditional request and non-modified cached response");
+            LOG.debug("Unconditional request and non-modified cached response");
             return false;
         }
 
         if (isConditional(request) && !allConditionalsMatch(request, entry, now)) {
-            log.debug("Conditional request and with mismatched conditions");
+            LOG.debug("Conditional request and with mismatched conditions");
             return false;
         }
 
         if (hasUnsupportedCacheEntryForGet(request, entry)) {
-            log.debug("HEAD response caching enabled but the cache entry does not contain a " +
+            LOG.debug("HEAD response caching enabled but the cache entry does not contain a " +
                       "request method, entity or a 204 response");
             return false;
         }
@@ -174,65 +176,68 @@ class CachedResponseSuitabilityChecker {
         while (it.hasNext()) {
             final HeaderElement elt = it.next();
             if (HeaderConstants.CACHE_CONTROL_NO_CACHE.equals(elt.getName())) {
-                log.debug("Response contained NO CACHE directive, cache was not suitable");
+                LOG.debug("Response contained NO CACHE directive, cache was not suitable");
                 return false;
             }
 
             if (HeaderConstants.CACHE_CONTROL_NO_STORE.equals(elt.getName())) {
-                log.debug("Response contained NO STORE directive, cache was not suitable");
+                LOG.debug("Response contained NO STORE directive, cache was not suitable");
                 return false;
             }
 
             if (HeaderConstants.CACHE_CONTROL_MAX_AGE.equals(elt.getName())) {
                 try {
-                    final int maxage = Integer.parseInt(elt.getValue());
-                    if (validityStrategy.getCurrentAgeSecs(entry, now) > maxage) {
-                        log.debug("Response from cache was NOT suitable due to max age");
+                    // in seconds
+                    final int maxAge = Integer.parseInt(elt.getValue());
+                    if (validityStrategy.getCurrentAge(entry, now).toSeconds() > maxAge) {
+                        LOG.debug("Response from cache was not suitable due to max age");
                         return false;
                     }
                 } catch (final NumberFormatException ex) {
                     // err conservatively
-                    log.debug("Response from cache was malformed" + ex.getMessage());
+                    LOG.debug("Response from cache was malformed: {}", ex.getMessage());
                     return false;
                 }
             }
 
             if (HeaderConstants.CACHE_CONTROL_MAX_STALE.equals(elt.getName())) {
                 try {
-                    final int maxstale = Integer.parseInt(elt.getValue());
-                    if (validityStrategy.getFreshnessLifetimeSecs(entry) > maxstale) {
-                        log.debug("Response from cache was not suitable due to Max stale freshness");
+                    // in seconds
+                    final int maxStale = Integer.parseInt(elt.getValue());
+                    if (validityStrategy.getFreshnessLifetime(entry).toSeconds() > maxStale) {
+                        LOG.debug("Response from cache was not suitable due to max stale freshness");
                         return false;
                     }
                 } catch (final NumberFormatException ex) {
                     // err conservatively
-                    log.debug("Response from cache was malformed: " + ex.getMessage());
+                    LOG.debug("Response from cache was malformed: {}", ex.getMessage());
                     return false;
                 }
             }
 
             if (HeaderConstants.CACHE_CONTROL_MIN_FRESH.equals(elt.getName())) {
                 try {
-                    final long minfresh = Long.parseLong(elt.getValue());
-                    if (minfresh < 0L) {
+                    // in seconds
+                    final long minFresh = Long.parseLong(elt.getValue());
+                    if (minFresh < 0L) {
                         return false;
                     }
-                    final long age = validityStrategy.getCurrentAgeSecs(entry, now);
-                    final long freshness = validityStrategy.getFreshnessLifetimeSecs(entry);
-                    if (freshness - age < minfresh) {
-                        log.debug("Response from cache was not suitable due to min fresh " +
+                    final TimeValue age = validityStrategy.getCurrentAge(entry, now);
+                    final TimeValue freshness = validityStrategy.getFreshnessLifetime(entry);
+                    if (freshness.toSeconds() - age.toSeconds() < minFresh) {
+                        LOG.debug("Response from cache was not suitable due to min fresh " +
                                 "freshness requirement");
                         return false;
                     }
                 } catch (final NumberFormatException ex) {
                     // err conservatively
-                    log.debug("Response from cache was malformed: " + ex.getMessage());
+                    LOG.debug("Response from cache was malformed: {}", ex.getMessage());
                     return false;
                 }
             }
         }
 
-        log.debug("Response from cache was suitable");
+        LOG.debug("Response from cache was suitable");
         return true;
     }
 
@@ -282,10 +287,7 @@ class CachedResponseSuitabilityChecker {
             return false;
         }
 
-        if (hasLastModifiedValidator && !lastModifiedValidatorMatches) {
-            return false;
-        }
-        return true;
+        return !hasLastModifiedValidator || lastModifiedValidatorMatches;
     }
 
     private boolean hasUnsupportedConditionalHeaders(final HttpRequest request) {

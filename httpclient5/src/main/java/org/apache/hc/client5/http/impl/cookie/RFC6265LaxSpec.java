@@ -47,6 +47,7 @@ public class RFC6265LaxSpec extends RFC6265CookieSpecBase {
                 new BasicDomainHandler(),
                 new LaxMaxAgeHandler(),
                 new BasicSecureHandler(),
+                new BasicHttpOnlyHandler(),
                 new LaxExpiresHandler());
     }
 

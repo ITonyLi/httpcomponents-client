@@ -34,14 +34,12 @@ import org.apache.hc.client5.http.AuthenticationStrategy;
 import org.apache.hc.client5.http.HttpRoute;
 import org.apache.hc.client5.http.RouteInfo.LayerType;
 import org.apache.hc.client5.http.RouteInfo.TunnelType;
-import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.auth.AuthExchange;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
-import org.apache.hc.client5.http.auth.AuthSchemes;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.auth.AuthScope;
 import org.apache.hc.client5.http.auth.ChallengeType;
 import org.apache.hc.client5.http.auth.Credentials;
-import org.apache.hc.client5.http.auth.KerberosConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.DefaultAuthenticationStrategy;
 import org.apache.hc.client5.http.impl.TunnelRefusedException;
@@ -63,6 +61,7 @@ import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.HttpException;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.Method;
 import org.apache.hc.core5.http.config.CharCodingConfig;
 import org.apache.hc.core5.http.config.Http1Config;
 import org.apache.hc.core5.http.config.Lookup;
@@ -94,7 +93,7 @@ public class ProxyClient {
     private final AuthenticationStrategy proxyAuthStrategy;
     private final HttpAuthenticator authenticator;
     private final AuthExchange proxyAuthExchange;
-    private final Lookup<AuthSchemeProvider> authSchemeRegistry;
+    private final Lookup<AuthSchemeFactory> authSchemeRegistry;
     private final ConnectionReuseStrategy reuseStrategy;
 
     /**
@@ -106,7 +105,12 @@ public class ProxyClient {
             final CharCodingConfig charCodingConfig,
             final RequestConfig requestConfig) {
         super();
-        this.connFactory = connFactory != null ? connFactory : new ManagedHttpClientConnectionFactory(h1Config, charCodingConfig, null, null);
+        this.connFactory = connFactory != null
+                ? connFactory
+                : ManagedHttpClientConnectionFactory.builder()
+                .http1Config(h1Config)
+                .charCodingConfig(charCodingConfig)
+                .build();
         this.requestConfig = requestConfig != null ? requestConfig : RequestConfig.DEFAULT;
         this.httpProcessor = new DefaultHttpProcessor(
                 new RequestTargetHost(), new RequestClientConnControl(), new RequestUserAgent());
@@ -114,14 +118,12 @@ public class ProxyClient {
         this.proxyAuthStrategy = new DefaultAuthenticationStrategy();
         this.authenticator = new HttpAuthenticator();
         this.proxyAuthExchange = new AuthExchange();
-        this.authSchemeRegistry = RegistryBuilder.<AuthSchemeProvider>create()
-                .register(AuthSchemes.BASIC.ident, new BasicSchemeFactory())
-                .register(AuthSchemes.DIGEST.ident, new DigestSchemeFactory())
-                .register(AuthSchemes.NTLM.ident, new NTLMSchemeFactory())
-                .register(AuthSchemes.SPNEGO.ident,
-                        new SPNegoSchemeFactory(KerberosConfig.DEFAULT, SystemDefaultDnsResolver.INSTANCE))
-                .register(AuthSchemes.KERBEROS.ident,
-                        new KerberosSchemeFactory(KerberosConfig.DEFAULT, SystemDefaultDnsResolver.INSTANCE))
+        this.authSchemeRegistry = RegistryBuilder.<AuthSchemeFactory>create()
+                .register(StandardAuthScheme.BASIC, BasicSchemeFactory.INSTANCE)
+                .register(StandardAuthScheme.DIGEST, DigestSchemeFactory.INSTANCE)
+                .register(StandardAuthScheme.NTLM, NTLMSchemeFactory.INSTANCE)
+                .register(StandardAuthScheme.SPNEGO, SPNegoSchemeFactory.DEFAULT)
+                .register(StandardAuthScheme.KERBEROS, KerberosSchemeFactory.DEFAULT)
                 .build();
         this.reuseStrategy = new DefaultConnectionReuseStrategy();
     }
@@ -157,7 +159,7 @@ public class ProxyClient {
         final HttpContext context = new BasicHttpContext();
         ClassicHttpResponse response;
 
-        final ClassicHttpRequest connect = new BasicClassicHttpRequest("CONNECT", host.toHostString());
+        final ClassicHttpRequest connect = new BasicClassicHttpRequest(Method.CONNECT, host.toHostString());
 
         final BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
         credsProvider.setCredentials(new AuthScope(proxy), credentials);

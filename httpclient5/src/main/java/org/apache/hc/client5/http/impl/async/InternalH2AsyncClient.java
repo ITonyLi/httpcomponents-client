@@ -32,24 +32,24 @@ import java.util.concurrent.ThreadFactory;
 
 import org.apache.hc.client5.http.HttpRoute;
 import org.apache.hc.client5.http.async.AsyncExecRuntime;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
 import org.apache.hc.client5.http.config.RequestConfig;
-import org.apache.hc.client5.http.cookie.CookieSpecProvider;
+import org.apache.hc.client5.http.cookie.CookieSpecFactory;
 import org.apache.hc.client5.http.cookie.CookieStore;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.client5.http.routing.HttpRoutePlanner;
-import org.apache.hc.client5.http.routing.RoutingSupport;
 import org.apache.hc.core5.annotation.Contract;
 import org.apache.hc.core5.annotation.Internal;
 import org.apache.hc.core5.annotation.ThreadingBehavior;
 import org.apache.hc.core5.http.HttpException;
-import org.apache.hc.core5.http.HttpRequest;
+import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.config.Lookup;
 import org.apache.hc.core5.http.nio.AsyncPushConsumer;
 import org.apache.hc.core5.http.nio.HandlerFactory;
-import org.apache.hc.core5.http2.nio.pool.H2ConnPool;
 import org.apache.hc.core5.reactor.DefaultConnectingIOReactor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Internal implementation of HTTP/2 only {@link CloseableHttpAsyncClient}.
@@ -65,18 +65,19 @@ import org.apache.hc.core5.reactor.DefaultConnectingIOReactor;
 @Internal
 public final class InternalH2AsyncClient extends InternalAbstractHttpAsyncClient {
 
+    private static final Logger LOG = LoggerFactory.getLogger(InternalH2AsyncClient.class);
     private final HttpRoutePlanner routePlanner;
-    private final H2ConnPool connPool;
+    private final InternalH2ConnPool connPool;
 
     InternalH2AsyncClient(
             final DefaultConnectingIOReactor ioReactor,
             final AsyncExecChainElement execChain,
             final AsyncPushConsumerRegistry pushConsumerRegistry,
             final ThreadFactory threadFactory,
-            final H2ConnPool connPool,
+            final InternalH2ConnPool connPool,
             final HttpRoutePlanner routePlanner,
-            final Lookup<CookieSpecProvider> cookieSpecRegistry,
-            final Lookup<AuthSchemeProvider> authSchemeRegistry,
+            final Lookup<CookieSpecFactory> cookieSpecRegistry,
+            final Lookup<AuthSchemeFactory> authSchemeRegistry,
             final CookieStore cookieStore,
             final CredentialsProvider credentialsProvider,
             final RequestConfig defaultConfig,
@@ -88,13 +89,13 @@ public final class InternalH2AsyncClient extends InternalAbstractHttpAsyncClient
     }
 
     @Override
-    AsyncExecRuntime crerateAsyncExecRuntime(final HandlerFactory<AsyncPushConsumer> pushHandlerFactory) {
-        return new InternalH2AsyncExecRuntime(log, connPool, pushHandlerFactory);
+    AsyncExecRuntime createAsyncExecRuntime(final HandlerFactory<AsyncPushConsumer> pushHandlerFactory) {
+        return new InternalH2AsyncExecRuntime(LOG, connPool, pushHandlerFactory);
     }
 
     @Override
-    HttpRoute determineRoute(final HttpRequest request, final HttpClientContext clientContext) throws HttpException {
-        final HttpRoute route = routePlanner.determineRoute(RoutingSupport.determineHost(request), clientContext);
+    HttpRoute determineRoute(final HttpHost httpHost, final HttpClientContext clientContext) throws HttpException {
+        final HttpRoute route = routePlanner.determineRoute(httpHost, clientContext);
         if (route.isTunnelled()) {
             throw new HttpException("HTTP/2 tunneling not supported");
         }

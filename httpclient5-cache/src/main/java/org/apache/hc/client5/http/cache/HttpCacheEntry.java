@@ -64,7 +64,7 @@ public class HttpCacheEntry implements MessageHeaders, Serializable {
     private final int status;
     private final HeaderGroup responseHeaders;
     private final Resource resource;
-    private final Map<String,String> variantMap;
+    private final Map<String, String> variantMap;
     private final Date date;
 
     /**
@@ -91,7 +91,7 @@ public class HttpCacheEntry implements MessageHeaders, Serializable {
             final int status,
             final Header[] responseHeaders,
             final Resource resource,
-            final Map<String,String> variantMap) {
+            final Map<String, String> variantMap) {
         super();
         Args.notNull(requestDate, "Request date");
         Args.notNull(responseDate, "Response date");
@@ -124,7 +124,7 @@ public class HttpCacheEntry implements MessageHeaders, Serializable {
      */
     public HttpCacheEntry(final Date requestDate, final Date responseDate, final int status,
             final Header[] responseHeaders, final Resource resource) {
-        this(requestDate, responseDate, status, responseHeaders, resource, new HashMap<String,String>());
+        this(requestDate, responseDate, status, responseHeaders, resource, new HashMap<>());
     }
 
     /**

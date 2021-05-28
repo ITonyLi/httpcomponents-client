@@ -34,6 +34,7 @@ import org.apache.hc.client5.http.classic.BackoffManager;
 import org.apache.hc.core5.annotation.Experimental;
 import org.apache.hc.core5.pool.ConnPoolControl;
 import org.apache.hc.core5.util.Args;
+import org.apache.hc.core5.util.TimeValue;
 
 /**
  * <p>The {@code AIMDBackoffManager} applies an additive increase,
@@ -60,9 +61,9 @@ public class AIMDBackoffManager implements BackoffManager {
 
     private final ConnPoolControl<HttpRoute> connPerRoute;
     private final Clock clock;
-    private final Map<HttpRoute,Long> lastRouteProbes;
-    private final Map<HttpRoute,Long> lastRouteBackoffs;
-    private long coolDown = 5 * 1000L;
+    private final Map<HttpRoute, Long> lastRouteProbes;
+    private final Map<HttpRoute, Long> lastRouteBackoffs;
+    private TimeValue coolDown = TimeValue.ofSeconds(5L);
     private double backoffFactor = 0.5;
     private int cap = 2; // Per RFC 2616 sec 8.1.4
 
@@ -90,11 +91,11 @@ public class AIMDBackoffManager implements BackoffManager {
             final int curr = connPerRoute.getMaxPerRoute(route);
             final Long lastUpdate = getLastUpdate(lastRouteBackoffs, route);
             final long now = clock.getCurrentTime();
-            if (now - lastUpdate.longValue() < coolDown) {
+            if (now - lastUpdate < coolDown.toMilliseconds()) {
                 return;
             }
             connPerRoute.setMaxPerRoute(route, getBackedOffPoolSize(curr));
-            lastRouteBackoffs.put(route, Long.valueOf(now));
+            lastRouteBackoffs.put(route, now);
         }
     }
 
@@ -113,18 +114,19 @@ public class AIMDBackoffManager implements BackoffManager {
             final Long lastProbe = getLastUpdate(lastRouteProbes, route);
             final Long lastBackoff = getLastUpdate(lastRouteBackoffs, route);
             final long now = clock.getCurrentTime();
-            if (now - lastProbe.longValue() < coolDown || now - lastBackoff.longValue() < coolDown) {
+            if (now - lastProbe < coolDown.toMilliseconds()
+                || now - lastBackoff < coolDown.toMilliseconds()) {
                 return;
             }
             connPerRoute.setMaxPerRoute(route, max);
-            lastRouteProbes.put(route, Long.valueOf(now));
+            lastRouteProbes.put(route, now);
         }
     }
 
-    private Long getLastUpdate(final Map<HttpRoute,Long> updates, final HttpRoute route) {
+    private Long getLastUpdate(final Map<HttpRoute, Long> updates, final HttpRoute route) {
         Long lastUpdate = updates.get(route);
         if (lastUpdate == null) {
-            lastUpdate = Long.valueOf(0L);
+            lastUpdate = 0L;
         }
         return lastUpdate;
     }
@@ -144,15 +146,14 @@ public class AIMDBackoffManager implements BackoffManager {
     }
 
     /**
-     * Sets the amount of time, in milliseconds, to wait between
-     * adjustments in pool sizes for a given host, to allow
-     * enough time for the adjustments to take effect. Defaults
-     * to 5000L (5 seconds).
-     * @param l must be positive
+     * Sets the amount of time to wait between adjustments in
+     * pool sizes for a given host, to allow enough time for
+     * the adjustments to take effect. Defaults to 5 seconds.
+     * @param coolDown must be positive
      */
-    public void setCooldownMillis(final long l) {
-        Args.positive(coolDown, "Cool down");
-        coolDown = l;
+    public void setCoolDown(final TimeValue coolDown) {
+        Args.positive(coolDown.getDuration(), "coolDown");
+        this.coolDown = coolDown;
     }
 
     /**

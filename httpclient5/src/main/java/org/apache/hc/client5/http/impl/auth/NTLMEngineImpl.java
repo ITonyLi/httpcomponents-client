@@ -103,6 +103,7 @@ final class NTLMEngineImpl implements NTLMEngine {
         try {
             rnd = java.security.SecureRandom.getInstance("SHA1PRNG");
         } catch (final Exception ignore) {
+            // ignore
         }
         RND_GEN = rnd;
     }
@@ -233,7 +234,7 @@ final class NTLMEngineImpl implements NTLMEngine {
      *            the 8 byte array the server sent.
      * @return The type 3 message.
      * @throws NTLMEngineException
-     *             If {@encrypt(byte[],byte[])} fails.
+     *             If {@link Type3Message#Type3Message(String, String, String, char[], byte[], int, String, byte[])} fails.
      */
     static String getType3Message(final String user, final char[] password, final String host, final String domain,
             final byte[] nonce, final int type2Flags, final String target, final byte[] targetInformation)
@@ -331,22 +332,22 @@ final class NTLMEngineImpl implements NTLMEngine {
         byte[] timestamp;
 
         // Stuff we always generate
-        byte[] lmHash = null;
-        byte[] lmResponse = null;
-        byte[] ntlmHash = null;
-        byte[] ntlmResponse = null;
-        byte[] ntlmv2Hash = null;
-        byte[] lmv2Hash = null;
-        byte[] lmv2Response = null;
-        byte[] ntlmv2Blob = null;
-        byte[] ntlmv2Response = null;
-        byte[] ntlm2SessionResponse = null;
-        byte[] lm2SessionResponse = null;
-        byte[] lmUserSessionKey = null;
-        byte[] ntlmUserSessionKey = null;
-        byte[] ntlmv2UserSessionKey = null;
-        byte[] ntlm2SessionResponseUserSessionKey = null;
-        byte[] lanManagerSessionKey = null;
+        byte[] lmHash;
+        byte[] lmResponse;
+        byte[] ntlmHash;
+        byte[] ntlmResponse;
+        byte[] ntlmv2Hash;
+        byte[] lmv2Hash;
+        byte[] lmv2Response;
+        byte[] ntlmv2Blob;
+        byte[] ntlmv2Response;
+        byte[] ntlm2SessionResponse;
+        byte[] lm2SessionResponse;
+        byte[] lmUserSessionKey;
+        byte[] ntlmUserSessionKey;
+        byte[] ntlmv2UserSessionKey;
+        byte[] ntlm2SessionResponseUserSessionKey;
+        byte[] lanManagerSessionKey;
 
         public CipherGen(final Random random, final long currentTime,
             final String domain, final String user, final char[] password,
@@ -797,7 +798,7 @@ final class NTLMEngineImpl implements NTLMEngine {
 
     enum Mode
     {
-        CLIENT, SERVER;
+        CLIENT, SERVER
     }
 
     static class Handle
@@ -807,7 +808,7 @@ final class NTLMEngineImpl implements NTLMEngine {
         private final Cipher rc4;
         final Mode mode;
         final private boolean isConnection;
-        int sequenceNumber = 0;
+        int sequenceNumber;
 
 
         Handle( final byte[] exportedSessionKey, final Mode mode, final boolean isConnection ) throws NTLMEngineException
@@ -1079,10 +1080,10 @@ final class NTLMEngineImpl implements NTLMEngine {
     /** NTLM message generation, base class */
     static class NTLMMessage {
         /** The current response */
-        byte[] messageContents = null;
+        byte[] messageContents;
 
         /** The current output position */
-        int currentOutputPosition = 0;
+        int currentOutputPosition;
 
         /** Constructor to use when message contents are not yet known */
         NTLMMessage() {
@@ -1112,8 +1113,8 @@ final class NTLMEngineImpl implements NTLMEngine {
             // Check to be sure there's a type 2 message indicator next
             final int type = readULong(SIGNATURE.length);
             if (type != expectedType) {
-                throw new NTLMEngineException("NTLM type " + Integer.toString(expectedType)
-                        + " message expected - instead got type " + Integer.toString(type));
+                throw new NTLMEngineException("NTLM type " + expectedType
+                        + " message expected - instead got type " + type);
             }
 
             currentOutputPosition = messageContents.length;
@@ -1233,8 +1234,7 @@ final class NTLMEngineImpl implements NTLMEngine {
             if (messageContents == null) {
                 buildMessage();
             }
-            final byte[] resp;
-            if ( messageContents.length > currentOutputPosition ) {
+            if (messageContents.length > currentOutputPosition) {
                 final byte[] tmp = new byte[currentOutputPosition];
                 System.arraycopy( messageContents, 0, tmp, 0, currentOutputPosition );
                 messageContents = tmp;
@@ -1260,7 +1260,7 @@ final class NTLMEngineImpl implements NTLMEngine {
 
         Type1Message(final String domain, final String host, final Integer flags) {
             super();
-            this.flags = ((flags == null)?getDefaultFlags():flags);
+            this.flags = ((flags == null)?getDefaultFlags(): flags.intValue());
 
             // See HTTPCLIENT-1662
             final String unqualifiedHost = host;
@@ -1862,7 +1862,7 @@ final class NTLMEngineImpl implements NTLMEngine {
         int B = 0xefcdab89;
         int C = 0x98badcfe;
         int D = 0x10325476;
-        long count = 0L;
+        long count;
         final byte[] dataBuffer = new byte[64];
 
         MD4() {

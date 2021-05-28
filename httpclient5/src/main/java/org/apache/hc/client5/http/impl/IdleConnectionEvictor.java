@@ -54,23 +54,20 @@ public final class IdleConnectionEvictor {
         Args.notNull(connectionManager, "Connection manager");
         this.threadFactory = threadFactory != null ? threadFactory : new DefaultThreadFactory("idle-connection-evictor", true);
         final TimeValue localSleepTime = sleepTime != null ? sleepTime : TimeValue.ofSeconds(5);
-        this.thread = this.threadFactory.newThread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    while (!Thread.currentThread().isInterrupted()) {
-                        Thread.sleep(localSleepTime.toMillis());
-                        connectionManager.closeExpired();
-                        if (maxIdleTime != null) {
-                            connectionManager.closeIdle(maxIdleTime);
-                        }
+        this.thread = this.threadFactory.newThread(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {
+                    localSleepTime.sleep();
+                    connectionManager.closeExpired();
+                    if (maxIdleTime != null) {
+                        connectionManager.closeIdle(maxIdleTime);
                     }
-                } catch (final InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                } catch (final Exception ex) {
                 }
-
+            } catch (final InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            } catch (final Exception ex) {
             }
+
         });
     }
 
@@ -95,7 +92,7 @@ public final class IdleConnectionEvictor {
     }
 
     public void awaitTermination(final Timeout timeout) throws InterruptedException {
-        thread.join(timeout != null ? timeout.toMillis() : Long.MAX_VALUE);
+        thread.join(timeout != null ? timeout.toMilliseconds() : Long.MAX_VALUE);
     }
 
 }

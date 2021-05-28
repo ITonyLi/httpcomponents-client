@@ -114,13 +114,13 @@ public class TestDefaultRedirectStrategy {
         final HttpResponse response = new BasicHttpResponse(HttpStatus.SC_SEE_OTHER, "Redirect");
         try {
             redirectStrategy.isRedirected(null, response, context);
-            Assert.fail("IllegalArgumentException expected");
-        } catch (final IllegalArgumentException expected) {
+            Assert.fail("NullPointerException expected");
+        } catch (final NullPointerException expected) {
         }
         try {
             redirectStrategy.isRedirected(httpget, null, context);
-            Assert.fail("IllegalArgumentException expected");
-        } catch (final IllegalArgumentException expected) {
+            Assert.fail("NullPointerException expected");
+        } catch (final NullPointerException expected) {
         }
     }
 
@@ -135,23 +135,25 @@ public class TestDefaultRedirectStrategy {
         Assert.assertEquals(URI.create("http://localhost/stuff"), uri);
     }
 
-    @Test(expected=HttpException.class)
+    @Test
     public void testGetLocationUriMissingHeader() throws Exception {
         final DefaultRedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
         final HttpClientContext context = HttpClientContext.create();
         final HttpGet httpget = new HttpGet("http://localhost/");
         final HttpResponse response = new BasicHttpResponse(HttpStatus.SC_MOVED_TEMPORARILY, "Redirect");
-        redirectStrategy.getLocationURI(httpget, response, context);
+        Assert.assertThrows(HttpException.class, () ->
+                redirectStrategy.getLocationURI(httpget, response, context));
     }
 
-    @Test(expected=ProtocolException.class)
+    @Test
     public void testGetLocationUriInvalidLocation() throws Exception {
         final DefaultRedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
         final HttpClientContext context = HttpClientContext.create();
         final HttpGet httpget = new HttpGet("http://localhost/");
         final HttpResponse response = new BasicHttpResponse(HttpStatus.SC_MOVED_TEMPORARILY, "Redirect");
         response.addHeader("Location", "http://localhost/not valid");
-        redirectStrategy.getLocationURI(httpget, response, context);
+        Assert.assertThrows(ProtocolException.class, () ->
+                redirectStrategy.getLocationURI(httpget, response, context));
     }
 
     @Test
@@ -207,18 +209,18 @@ public class TestDefaultRedirectStrategy {
         response.addHeader("Location", "http://localhost/stuff");
         try {
             redirectStrategy.getLocationURI(null, response, context);
-            Assert.fail("IllegalArgumentException expected");
-        } catch (final IllegalArgumentException expected) {
+            Assert.fail("NullPointerException expected");
+        } catch (final NullPointerException expected) {
         }
         try {
             redirectStrategy.getLocationURI(httpget, null, context);
-            Assert.fail("IllegalArgumentException expected");
-        } catch (final IllegalArgumentException expected) {
+            Assert.fail("NullPointerException expected");
+        } catch (final NullPointerException expected) {
         }
         try {
             redirectStrategy.getLocationURI(httpget, response, null);
-            Assert.fail("IllegalArgumentException expected");
-        } catch (final IllegalArgumentException expected) {
+            Assert.fail("NullPointerException expected");
+        } catch (final NullPointerException expected) {
         }
     }
 
@@ -229,10 +231,11 @@ public class TestDefaultRedirectStrategy {
                 redirectStrategy.createLocationURI("http://BlahBlah").toASCIIString());
     }
 
-    @Test(expected=ProtocolException.class)
+    @Test
     public void testCreateLocationURIInvalid() throws Exception {
         final DefaultRedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
-        redirectStrategy.createLocationURI(":::::::");
+        Assert.assertThrows(ProtocolException.class, () ->
+                redirectStrategy.createLocationURI(":::::::"));
     }
 
 }

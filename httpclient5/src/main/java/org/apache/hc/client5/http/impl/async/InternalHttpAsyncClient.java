@@ -32,27 +32,26 @@ import java.util.concurrent.ThreadFactory;
 
 import org.apache.hc.client5.http.HttpRoute;
 import org.apache.hc.client5.http.async.AsyncExecRuntime;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
 import org.apache.hc.client5.http.config.RequestConfig;
-import org.apache.hc.client5.http.cookie.CookieSpecProvider;
+import org.apache.hc.client5.http.cookie.CookieSpecFactory;
 import org.apache.hc.client5.http.cookie.CookieStore;
 import org.apache.hc.client5.http.nio.AsyncClientConnectionManager;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.client5.http.routing.HttpRoutePlanner;
-import org.apache.hc.client5.http.routing.RoutingSupport;
 import org.apache.hc.core5.annotation.Contract;
 import org.apache.hc.core5.annotation.Internal;
 import org.apache.hc.core5.annotation.ThreadingBehavior;
 import org.apache.hc.core5.http.HttpException;
-import org.apache.hc.core5.http.HttpRequest;
-import org.apache.hc.core5.http.HttpVersion;
-import org.apache.hc.core5.http.ProtocolVersion;
+import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.config.Lookup;
 import org.apache.hc.core5.http.nio.AsyncPushConsumer;
 import org.apache.hc.core5.http.nio.HandlerFactory;
 import org.apache.hc.core5.http2.HttpVersionPolicy;
 import org.apache.hc.core5.reactor.DefaultConnectingIOReactor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Internal implementation of {@link CloseableHttpAsyncClient} that can negotiate
@@ -69,7 +68,8 @@ import org.apache.hc.core5.reactor.DefaultConnectingIOReactor;
 @Internal
 public final class InternalHttpAsyncClient extends InternalAbstractHttpAsyncClient {
 
-    private final AsyncClientConnectionManager connmgr;
+    private static final Logger LOG = LoggerFactory.getLogger(InternalHttpAsyncClient.class);
+    private final AsyncClientConnectionManager manager;
     private final HttpRoutePlanner routePlanner;
     private final HttpVersionPolicy versionPolicy;
 
@@ -78,32 +78,31 @@ public final class InternalHttpAsyncClient extends InternalAbstractHttpAsyncClie
             final AsyncExecChainElement execChain,
             final AsyncPushConsumerRegistry pushConsumerRegistry,
             final ThreadFactory threadFactory,
-            final AsyncClientConnectionManager connmgr,
+            final AsyncClientConnectionManager manager,
             final HttpRoutePlanner routePlanner,
             final HttpVersionPolicy versionPolicy,
-            final Lookup<CookieSpecProvider> cookieSpecRegistry,
-            final Lookup<AuthSchemeProvider> authSchemeRegistry,
+            final Lookup<CookieSpecFactory> cookieSpecRegistry,
+            final Lookup<AuthSchemeFactory> authSchemeRegistry,
             final CookieStore cookieStore,
             final CredentialsProvider credentialsProvider,
             final RequestConfig defaultConfig,
             final List<Closeable> closeables) {
         super(ioReactor, pushConsumerRegistry, threadFactory, execChain,
                 cookieSpecRegistry, authSchemeRegistry, cookieStore, credentialsProvider, defaultConfig, closeables);
-        this.connmgr = connmgr;
+        this.manager = manager;
         this.routePlanner = routePlanner;
         this.versionPolicy = versionPolicy;
     }
 
     @Override
-    AsyncExecRuntime crerateAsyncExecRuntime(final HandlerFactory<AsyncPushConsumer> pushHandlerFactory) {
-        return new InternalHttpAsyncExecRuntime(log, connmgr, getConnectionInitiator(), pushHandlerFactory, versionPolicy);
+    AsyncExecRuntime createAsyncExecRuntime(final HandlerFactory<AsyncPushConsumer> pushHandlerFactory) {
+        return new InternalHttpAsyncExecRuntime(LOG, manager, getConnectionInitiator(), pushHandlerFactory, versionPolicy);
     }
 
     @Override
-    HttpRoute determineRoute(final HttpRequest request, final HttpClientContext clientContext) throws HttpException {
-        final HttpRoute route = routePlanner.determineRoute(RoutingSupport.determineHost(request), clientContext);
-        final ProtocolVersion protocolVersion = clientContext.getProtocolVersion();
-        if (route.isTunnelled() && protocolVersion.greaterEquals(HttpVersion.HTTP_2_0)) {
+    HttpRoute determineRoute(final HttpHost httpHost, final HttpClientContext clientContext) throws HttpException {
+        final HttpRoute route = routePlanner.determineRoute(httpHost, clientContext);
+        if (route.isTunnelled() && versionPolicy == HttpVersionPolicy.FORCE_HTTP_2) {
             throw new HttpException("HTTP/2 tunneling not supported");
         }
         return route;

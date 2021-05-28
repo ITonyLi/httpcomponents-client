@@ -30,6 +30,7 @@ package org.apache.hc.client5.http.ssl;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLSession;
 
 import org.apache.hc.core5.function.Factory;
 import org.apache.hc.core5.http.nio.ssl.TlsStrategy;
@@ -37,6 +38,7 @@ import org.apache.hc.core5.http.ssl.TLS;
 import org.apache.hc.core5.reactor.ssl.SSLBufferMode;
 import org.apache.hc.core5.reactor.ssl.TlsDetails;
 import org.apache.hc.core5.ssl.SSLContexts;
+import org.apache.hc.core5.util.ReflectionUtils;
 
 /**
  * Builder for client {@link TlsStrategy} instances.
@@ -100,7 +102,7 @@ public class ClientTlsStrategyBuilder {
     public final ClientTlsStrategyBuilder setTlsVersions(final TLS... tlslVersions) {
         this.tlsVersions = new String[tlslVersions.length];
         for (int i = 0; i < tlslVersions.length; i++) {
-            this.tlsVersions[i] = tlslVersions[i].ident;
+            this.tlsVersions[i] = tlslVersions[i].id;
         }
         return this;
     }
@@ -165,13 +167,24 @@ public class ClientTlsStrategyBuilder {
         } else {
             ciphersCopy = systemProperties ? HttpsSupport.getSystemCipherSuits() : null;
         }
+        final Factory<SSLEngine, TlsDetails> tlsDetailsFactoryCopy;
+        if (tlsDetailsFactory != null) {
+            tlsDetailsFactoryCopy = tlsDetailsFactory;
+        } else {
+            tlsDetailsFactoryCopy = sslEngine -> {
+                final SSLSession sslSession = sslEngine.getSession();
+                final String applicationProtocol = ReflectionUtils.callGetter(sslEngine,
+                    "ApplicationProtocol", String.class);
+                return new TlsDetails(sslSession, applicationProtocol);
+            };
+        }
         return new DefaultClientTlsStrategy(
                 sslContextCopy,
                 tlsVersionsCopy,
                 ciphersCopy,
                 sslBufferMode != null ? sslBufferMode : SSLBufferMode.STATIC,
                 hostnameVerifier != null ? hostnameVerifier : HttpsSupport.getDefaultHostnameVerifier(),
-                tlsDetailsFactory);
+                tlsDetailsFactoryCopy);
     }
 
 }

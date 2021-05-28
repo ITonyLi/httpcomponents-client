@@ -36,14 +36,14 @@ import org.apache.hc.client5.http.async.methods.SimpleResponseConsumer;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.core5.annotation.Contract;
 import org.apache.hc.core5.annotation.ThreadingBehavior;
-import org.apache.hc.core5.concurrent.BasicFuture;
 import org.apache.hc.core5.concurrent.FutureCallback;
 import org.apache.hc.core5.function.Supplier;
+import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.nio.AsyncPushConsumer;
 import org.apache.hc.core5.http.nio.AsyncRequestProducer;
 import org.apache.hc.core5.http.nio.AsyncResponseConsumer;
+import org.apache.hc.core5.http.nio.HandlerFactory;
 import org.apache.hc.core5.http.protocol.HttpContext;
-import org.apache.hc.core5.io.CloseMode;
 import org.apache.hc.core5.io.ModalCloseable;
 import org.apache.hc.core5.reactor.IOReactorStatus;
 import org.apache.hc.core5.util.Args;
@@ -65,12 +65,36 @@ public abstract class CloseableHttpAsyncClient implements HttpAsyncClient, Modal
 
     public abstract void initiateShutdown();
 
-    /**
-     * @deprecated Use {@link #close(CloseMode)}
-     */
-    @Deprecated
-    public void shutdown(final CloseMode closeMode) {
-        close(closeMode);
+    protected abstract <T> Future<T> doExecute(
+            final HttpHost target,
+            final AsyncRequestProducer requestProducer,
+            final AsyncResponseConsumer<T> responseConsumer,
+            final HandlerFactory<AsyncPushConsumer> pushHandlerFactory,
+            final HttpContext context,
+            final FutureCallback<T> callback);
+
+    public final <T> Future<T> execute(
+            final HttpHost target,
+            final AsyncRequestProducer requestProducer,
+            final AsyncResponseConsumer<T> responseConsumer,
+            final HandlerFactory<AsyncPushConsumer> pushHandlerFactory,
+            final HttpContext context,
+            final FutureCallback<T> callback) {
+        Args.notNull(requestProducer, "Request producer");
+        Args.notNull(responseConsumer, "Response consumer");
+        return doExecute(target, requestProducer, responseConsumer, pushHandlerFactory, context, callback);
+    }
+
+    @Override
+    public final <T> Future<T> execute(
+            final AsyncRequestProducer requestProducer,
+            final AsyncResponseConsumer<T> responseConsumer,
+            final HandlerFactory<AsyncPushConsumer> pushHandlerFactory,
+            final HttpContext context,
+            final FutureCallback<T> callback) {
+        Args.notNull(requestProducer, "Request producer");
+        Args.notNull(responseConsumer, "Response consumer");
+        return doExecute(null, requestProducer, responseConsumer, pushHandlerFactory, context, callback);
     }
 
     public final <T> Future<T> execute(
@@ -78,6 +102,8 @@ public abstract class CloseableHttpAsyncClient implements HttpAsyncClient, Modal
             final AsyncResponseConsumer<T> responseConsumer,
             final HttpContext context,
             final FutureCallback<T> callback) {
+        Args.notNull(requestProducer, "Request producer");
+        Args.notNull(responseConsumer, "Response consumer");
         return execute(requestProducer, responseConsumer, null, context, callback);
     }
 
@@ -85,6 +111,8 @@ public abstract class CloseableHttpAsyncClient implements HttpAsyncClient, Modal
             final AsyncRequestProducer requestProducer,
             final AsyncResponseConsumer<T> responseConsumer,
             final FutureCallback<T> callback) {
+        Args.notNull(requestProducer, "Request producer");
+        Args.notNull(responseConsumer, "Response consumer");
         return execute(requestProducer, responseConsumer, HttpClientContext.create(), callback);
     }
 
@@ -93,26 +121,7 @@ public abstract class CloseableHttpAsyncClient implements HttpAsyncClient, Modal
             final HttpContext context,
             final FutureCallback<SimpleHttpResponse> callback) {
         Args.notNull(request, "Request");
-        final BasicFuture<SimpleHttpResponse> future = new BasicFuture<>(callback);
-        execute(SimpleRequestProducer.create(request), SimpleResponseConsumer.create(), context, new FutureCallback<SimpleHttpResponse>() {
-
-            @Override
-            public void completed(final SimpleHttpResponse response) {
-                future.completed(response);
-            }
-
-            @Override
-            public void failed(final Exception ex) {
-                future.failed(ex);
-            }
-
-            @Override
-            public void cancelled() {
-                future.cancel(true);
-            }
-
-        });
-        return future;
+        return execute(SimpleRequestProducer.create(request), SimpleResponseConsumer.create(), context, callback);
     }
 
     public final Future<SimpleHttpResponse> execute(

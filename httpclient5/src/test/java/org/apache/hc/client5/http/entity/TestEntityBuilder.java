@@ -39,11 +39,10 @@ import org.mockito.Mockito;
 
 public class TestEntityBuilder {
 
-    @Test(expected=IllegalStateException.class)
+    @Test
     public void testBuildEmptyEntity() throws Exception {
-        final HttpEntity entity = EntityBuilder.create().build();
-        Assert.assertNotNull(entity);
-        entity.getContent();
+        Assert.assertThrows(IllegalStateException.class, () ->
+                EntityBuilder.create().build());
     }
 
     @Test
@@ -117,7 +116,7 @@ public class TestEntityBuilder {
 
     @Test
     public void testBuildGZipped() throws Exception {
-        final HttpEntity entity = EntityBuilder.create().setText("stuff").gzipCompress().build();
+        final HttpEntity entity = EntityBuilder.create().setText("stuff").gzipCompressed().build();
         Assert.assertNotNull(entity);
         Assert.assertNotNull(entity.getContentType());
         Assert.assertEquals("text/plain; charset=ISO-8859-1", entity.getContentType());

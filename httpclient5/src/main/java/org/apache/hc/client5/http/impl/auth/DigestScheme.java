@@ -27,6 +27,8 @@
 package org.apache.hc.client5.http.impl.auth;
 
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -48,10 +50,12 @@ import org.apache.hc.client5.http.auth.AuthChallenge;
 import org.apache.hc.client5.http.auth.AuthScheme;
 import org.apache.hc.client5.http.auth.AuthScope;
 import org.apache.hc.client5.http.auth.AuthenticationException;
-import org.apache.hc.client5.http.utils.ByteArrayBuilder;
 import org.apache.hc.client5.http.auth.Credentials;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
 import org.apache.hc.client5.http.auth.MalformedChallengeException;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
+import org.apache.hc.client5.http.protocol.HttpClientContext;
+import org.apache.hc.client5.http.utils.ByteArrayBuilder;
 import org.apache.hc.core5.annotation.Internal;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.HttpEntity;
@@ -63,6 +67,8 @@ import org.apache.hc.core5.http.message.BasicNameValuePair;
 import org.apache.hc.core5.http.protocol.HttpContext;
 import org.apache.hc.core5.util.Args;
 import org.apache.hc.core5.util.CharArrayBuffer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Digest authentication scheme as defined in RFC 2617.
@@ -82,6 +88,8 @@ public class DigestScheme implements AuthScheme, Serializable {
 
     private static final long serialVersionUID = 3883908186234566916L;
 
+    private static final Logger LOG = LoggerFactory.getLogger(DigestScheme.class);
+
     /**
      * Hexa values used when creating 32 character long digest in HTTP DigestScheme
      * in case of authentication.
@@ -98,6 +106,7 @@ public class DigestScheme implements AuthScheme, Serializable {
     private static final int QOP_AUTH_INT = 1;
     private static final int QOP_AUTH = 2;
 
+    private transient Charset defaultCharset;
     private final Map<String, String> paramMap;
     private boolean complete;
     private transient ByteArrayBuilder buffer;
@@ -112,6 +121,11 @@ public class DigestScheme implements AuthScheme, Serializable {
     private char[] password;
 
     public DigestScheme() {
+        this(StandardCharsets.ISO_8859_1);
+    }
+
+    public DigestScheme(final Charset charset) {
+        this.defaultCharset = charset != null ? charset : StandardCharsets.ISO_8859_1;
         this.paramMap = new HashMap<>();
         this.complete = false;
     }
@@ -126,7 +140,7 @@ public class DigestScheme implements AuthScheme, Serializable {
 
     @Override
     public String getName() {
-        return "digest";
+        return StandardAuthScheme.DIGEST;
     }
 
     @Override
@@ -172,12 +186,19 @@ public class DigestScheme implements AuthScheme, Serializable {
         Args.notNull(host, "Auth host");
         Args.notNull(credentialsProvider, "CredentialsProvider");
 
+        final AuthScope authScope = new AuthScope(host, getRealm(), getName());
         final Credentials credentials = credentialsProvider.getCredentials(
-                new AuthScope(host, getRealm(), getName()), context);
+                authScope, context);
         if (credentials != null) {
             this.username = credentials.getUserPrincipal().getName();
             this.password = credentials.getPassword();
             return true;
+        }
+
+        if (LOG.isDebugEnabled()) {
+            final HttpClientContext clientContext = HttpClientContext.adapt(context);
+            final String exchangeId = clientContext.getExchangeId();
+            LOG.debug("{} No credentials found for auth scope [{}]", exchangeId, authScope);
         }
         this.username = null;
         this.password = null;
@@ -255,11 +276,11 @@ public class DigestScheme implements AuthScheme, Serializable {
         }
 
         final String charsetName = this.paramMap.get("charset");
-        Charset charset;
+        final Charset charset;
         try {
-            charset = charsetName != null ? Charset.forName(charsetName) : StandardCharsets.ISO_8859_1;
+            charset = charsetName != null ? Charset.forName(charsetName) : defaultCharset;
         } catch (final UnsupportedCharsetException ex) {
-            charset = StandardCharsets.ISO_8859_1;
+            throw new AuthenticationException("Unsupported charset: " + charsetName);
         }
 
         String digAlg = algorithm;
@@ -271,7 +292,7 @@ public class DigestScheme implements AuthScheme, Serializable {
         try {
             digester = createMessageDigest(digAlg);
         } catch (final UnsupportedDigestAlgorithmException ex) {
-            throw new AuthenticationException("Unsuppported digest algorithm: " + digAlg);
+            throw new AuthenticationException("Unsupported digest algorithm: " + digAlg);
         }
 
         if (nonce.equals(this.lastNonce)) {
@@ -283,7 +304,7 @@ public class DigestScheme implements AuthScheme, Serializable {
         }
 
         final StringBuilder sb = new StringBuilder(8);
-        try (final Formatter formatter = new Formatter(sb, Locale.US)) {
+        try (final Formatter formatter = new Formatter(sb, Locale.ROOT)) {
             formatter.format("%08x", nounceCount);
         }
         final String nc = sb.toString();
@@ -312,12 +333,11 @@ public class DigestScheme implements AuthScheme, Serializable {
             final String checksum = formatHex(digester.digest(this.buffer.toByteArray()));
             buffer.reset();
             buffer.append(checksum).append(":").append(nonce).append(":").append(cnonce);
-            a1 = buffer.toByteArray();
         } else {
             // unq(username-value) ":" unq(realm-value) ":" passwd
             buffer.append(username).append(":").append(realm).append(":").append(password);
-            a1 = buffer.toByteArray();
         }
+        a1 = buffer.toByteArray();
 
         final String hasha1 = formatHex(digester.digest(a1));
         buffer.reset();
@@ -362,19 +382,18 @@ public class DigestScheme implements AuthScheme, Serializable {
         final byte[] digestInput;
         if (qop == QOP_MISSING) {
             buffer.append(hasha1).append(":").append(nonce).append(":").append(hasha2);
-            digestInput = buffer.toByteArray();
         } else {
             buffer.append(hasha1).append(":").append(nonce).append(":").append(nc).append(":")
                 .append(cnonce).append(":").append(qop == QOP_AUTH_INT ? "auth-int" : "auth")
                 .append(":").append(hasha2);
-            digestInput = buffer.toByteArray();
         }
+        digestInput = buffer.toByteArray();
         buffer.reset();
 
         final String digest = formatHex(digester.digest(digestInput));
 
         final CharArrayBuffer buffer = new CharArrayBuffer(128);
-        buffer.append("Digest ");
+        buffer.append(StandardAuthScheme.DIGEST + " ");
 
         final List<BasicNameValuePair> params = new ArrayList<>(20);
         params.add(new BasicNameValuePair("username", username));
@@ -462,9 +481,19 @@ public class DigestScheme implements AuthScheme, Serializable {
         return tmp;
     }
 
+    private void writeObject(final ObjectOutputStream out) throws IOException {
+        out.defaultWriteObject();
+        out.writeUTF(defaultCharset.name());
+    }
+
+    private void readObject(final ObjectInputStream in) throws IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        this.defaultCharset = Charset.forName(in.readUTF());
+    }
+
     @Override
     public String toString() {
-        return getName() + this.paramMap.toString();
+        return getName() + this.paramMap;
     }
 
 }

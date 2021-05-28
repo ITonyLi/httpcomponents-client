@@ -33,7 +33,6 @@ import org.apache.hc.client5.http.HttpRoute;
 import org.apache.hc.client5.http.classic.ExecChain;
 import org.apache.hc.client5.http.classic.ExecChainHandler;
 import org.apache.hc.client5.http.classic.ExecRuntime;
-import org.apache.hc.client5.http.impl.classic.ClassicRequestCopier;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ClassicHttpResponse;
@@ -42,6 +41,7 @@ import org.apache.hc.core5.http.HttpException;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.HttpRequest;
 import org.apache.hc.core5.http.HttpResponse;
+import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.apache.hc.core5.http.message.BasicClassicHttpRequest;
 import org.easymock.EasyMock;
 import org.easymock.IExpectationSetters;
@@ -51,7 +51,7 @@ public abstract class AbstractProtocolTest {
 
     protected static final int MAX_BYTES = 1024;
     protected static final int MAX_ENTRIES = 100;
-    protected int entityLength = 128;
+    protected final int entityLength = 128;
     protected HttpHost host;
     protected HttpRoute route;
     protected HttpEntity body;
@@ -107,8 +107,10 @@ public abstract class AbstractProtocolTest {
     }
 
     public ClassicHttpResponse execute(final ClassicHttpRequest request) throws IOException, HttpException {
-        return impl.execute(ClassicRequestCopier.INSTANCE.copy(request), new ExecChain.Scope(
-                "test", route, request, mockExecRuntime, context), mockExecChain);
+        return impl.execute(
+                ClassicRequestBuilder.copy(request).build(),
+                new ExecChain.Scope("test", route, request, mockExecRuntime, context),
+                mockExecChain);
     }
 
     protected ExecChainHandler createCachingExecChain(final HttpCache cache, final CacheConfig config) {
@@ -153,7 +155,7 @@ public abstract class AbstractProtocolTest {
         EasyMock.expect(mockCache.getCacheEntry(EasyMock.isA(HttpHost.class), EasyMock.isA(HttpRequest.class)))
             .andReturn(null).anyTimes();
         EasyMock.expect(mockCache.getVariantCacheEntriesWithEtags(EasyMock.isA(HttpHost.class), EasyMock.isA(HttpRequest.class)))
-            .andReturn(new HashMap<String,Variant>()).anyTimes();
+            .andReturn(new HashMap<>()).anyTimes();
 
         mockCache.flushCacheEntriesFor(EasyMock.isA(HttpHost.class), EasyMock.isA(HttpRequest.class));
         EasyMock.expectLastCall().anyTimes();

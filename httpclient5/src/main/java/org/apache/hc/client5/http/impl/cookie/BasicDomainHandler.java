@@ -99,13 +99,11 @@ public class BasicDomainHandler implements CommonCookieAttributeHandler {
         final String normalizedDomain = domain.startsWith(".") ? domain.substring(1) : domain;
         if (host.endsWith(normalizedDomain)) {
             final int prefix = host.length() - normalizedDomain.length();
-            // Either a full match or a prefix endidng with a '.'
+            // Either a full match or a prefix ending with a '.'
             if (prefix == 0) {
                 return true;
             }
-            if (prefix > 1 && host.charAt(prefix - 1) == '.') {
-                return true;
-            }
+            return prefix > 1 && host.charAt(prefix - 1) == '.';
         }
         return false;
     }

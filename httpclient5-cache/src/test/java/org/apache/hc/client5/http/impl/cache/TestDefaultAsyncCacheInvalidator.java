@@ -55,7 +55,6 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.stubbing.Answer;
 
@@ -83,14 +82,9 @@ public class TestDefaultAsyncCacheInvalidator {
         now = new Date();
         tenSecondsAgo = new Date(now.getTime() - 10 * 1000L);
 
-        when(cacheKeyResolver.resolve(ArgumentMatchers.<URI>any())).thenAnswer(new Answer<String>() {
-
-            @Override
-            public String answer(final InvocationOnMock invocation) throws Throwable {
-                final URI uri = invocation.getArgument(0);
-                return HttpCacheSupport.normalize(uri).toASCIIString();
-            }
-
+        when(cacheKeyResolver.resolve(ArgumentMatchers.any())).thenAnswer((Answer<String>) invocation -> {
+            final URI uri = invocation.getArgument(0);
+            return HttpCacheSupport.normalize(uri).toASCIIString();
         });
 
         host = new HttpHost("foo.example.com");
@@ -110,8 +104,8 @@ public class TestDefaultAsyncCacheInvalidator {
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
         verify(mockEntry).getVariantMap();
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
     }
 
     @Test
@@ -124,16 +118,16 @@ public class TestDefaultAsyncCacheInvalidator {
 
         final URI uri = new URI("http://foo.example.com:80/");
         final String key = uri.toASCIIString();
-        cacheEntryHasVariantMap(new HashMap<String,String>());
+        cacheEntryHasVariantMap(new HashMap<>());
 
         cacheReturnsEntryForUri(key, mockEntry);
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
         verify(mockEntry).getVariantMap();
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq("http://foo.example.com:80/content"), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq("http://foo.example.com:80/content"), ArgumentMatchers.any());
     }
 
     @Test
@@ -146,16 +140,16 @@ public class TestDefaultAsyncCacheInvalidator {
 
         final URI uri = new URI("http://foo.example.com:80/");
         final String key = uri.toASCIIString();
-        cacheEntryHasVariantMap(new HashMap<String,String>());
+        cacheEntryHasVariantMap(new HashMap<>());
 
         cacheReturnsEntryForUri(key, mockEntry);
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
         verify(mockEntry).getVariantMap();
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq("http://foo.example.com:80/content"), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq("http://foo.example.com:80/content"), ArgumentMatchers.any());
     }
 
     @Test
@@ -168,16 +162,16 @@ public class TestDefaultAsyncCacheInvalidator {
 
         final URI uri = new URI("http://foo.example.com:80/");
         final String key = uri.toASCIIString();
-        cacheEntryHasVariantMap(new HashMap<String,String>());
+        cacheEntryHasVariantMap(new HashMap<>());
 
         cacheReturnsEntryForUri(key, mockEntry);
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
         verify(mockEntry).getVariantMap();
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq("http://foo.example.com:80/content"), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq("http://foo.example.com:80/content"), ArgumentMatchers.any());
     }
 
     @Test
@@ -190,15 +184,15 @@ public class TestDefaultAsyncCacheInvalidator {
 
         final URI uri = new URI("http://foo.example.com:80/");
         final String key = uri.toASCIIString();
-        cacheEntryHasVariantMap(new HashMap<String,String>());
+        cacheEntryHasVariantMap(new HashMap<>());
 
         cacheReturnsEntryForUri(key, mockEntry);
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
         verify(mockEntry).getVariantMap();
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
     }
 
     @Test
@@ -206,7 +200,7 @@ public class TestDefaultAsyncCacheInvalidator {
         final HttpRequest request = new BasicHttpRequest("GET","/");
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq("http://foo.example.com:80/"), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq("http://foo.example.com:80/"), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -215,7 +209,7 @@ public class TestDefaultAsyncCacheInvalidator {
         final HttpRequest request = new BasicHttpRequest("HEAD","/");
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq("http://foo.example.com:80/"), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq("http://foo.example.com:80/"), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -226,15 +220,15 @@ public class TestDefaultAsyncCacheInvalidator {
         final HttpRequest request = new BasicHttpRequest("GET", uri);
 
         cacheEntryisForMethod("HEAD");
-        cacheEntryHasVariantMap(new HashMap<String, String>());
+        cacheEntryHasVariantMap(new HashMap<>());
         cacheReturnsEntryForUri(key, mockEntry);
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
         verify(mockEntry).getRequestMethod();
         verify(mockEntry).getVariantMap();
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
     }
 
     @Test
@@ -254,9 +248,9 @@ public class TestDefaultAsyncCacheInvalidator {
 
         verify(mockEntry).getRequestMethod();
         verify(mockEntry).getVariantMap();
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(theVariantURI), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(theVariantURI), ArgumentMatchers.any());
     }
 
     @Test
@@ -269,7 +263,7 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -283,7 +277,7 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -299,7 +293,7 @@ public class TestDefaultAsyncCacheInvalidator {
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
         verify(mockEntry).getRequestMethod();
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -310,7 +304,7 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq("http://foo.example.com:80/"), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq("http://foo.example.com:80/"), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -321,7 +315,7 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq("http://foo.example.com:80/"), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq("http://foo.example.com:80/"), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -338,10 +332,10 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByRequest(host, request, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verify(mockEntry).getVariantMap();
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(variantUri), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(variantUri), ArgumentMatchers.any());
     }
 
     @Test
@@ -371,8 +365,8 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
     }
 
     @Test
@@ -393,8 +387,8 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
     }
 
     @Test
@@ -429,8 +423,8 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
     }
 
     @Test
@@ -451,8 +445,8 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
     }
 
     @Test
@@ -493,7 +487,7 @@ public class TestDefaultAsyncCacheInvalidator {
         cacheReturnsEntryForUri(key, entry);
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -515,7 +509,7 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -532,7 +526,7 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -554,7 +548,7 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -575,7 +569,7 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -597,8 +591,8 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -619,8 +613,8 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -642,8 +636,8 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -665,8 +659,8 @@ public class TestDefaultAsyncCacheInvalidator {
 
         impl.flushCacheEntriesInvalidatedByExchange(host, request, response, cacheKeyResolver, mockStorage, operationCallback);
 
-        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any());
-        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.<FutureCallback<Boolean>>any());
+        verify(mockStorage).getEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
+        verify(mockStorage).removeEntry(ArgumentMatchers.eq(key), ArgumentMatchers.any());
         verifyNoMoreInteractions(mockStorage);
     }
 
@@ -679,16 +673,11 @@ public class TestDefaultAsyncCacheInvalidator {
     private void cacheReturnsEntryForUri(final String key, final HttpCacheEntry cacheEntry) {
         Mockito.when(mockStorage.getEntry(
                 ArgumentMatchers.eq(key),
-                ArgumentMatchers.<FutureCallback<HttpCacheEntry>>any())).thenAnswer(new Answer<Cancellable>() {
-
-            @Override
-            public Cancellable answer(final InvocationOnMock invocation) throws Throwable {
-                final FutureCallback<HttpCacheEntry> callback = invocation.getArgument(1);
-                callback.completed(cacheEntry);
-                return cancellable;
-            }
-
-        });
+                ArgumentMatchers.any())).thenAnswer((Answer<Cancellable>) invocation -> {
+                    final FutureCallback<HttpCacheEntry> callback = invocation.getArgument(1);
+                    callback.completed(cacheEntry);
+                    return cancellable;
+                });
     }
 
     private void cacheEntryisForMethod(final String httpMethod) {

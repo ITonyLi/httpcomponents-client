@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 
-import org.apache.hc.client5.http.classic.methods.ClassicHttpRequests;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
 import org.apache.hc.client5.http.config.Configurable;
 import org.apache.hc.client5.http.config.RequestConfig;
@@ -55,12 +54,13 @@ import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.HttpVersion;
-import org.apache.hc.core5.http.Methods;
+import org.apache.hc.core5.http.Method;
 import org.apache.hc.core5.http.NameValuePair;
 import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
 import org.apache.hc.core5.http.io.entity.FileEntity;
 import org.apache.hc.core5.http.io.entity.InputStreamEntity;
-import org.apache.hc.core5.net.URLEncodedUtils;
+import org.apache.hc.core5.http.message.BasicClassicHttpRequest;
+import org.apache.hc.core5.net.WWWFormCodec;
 import org.apache.hc.core5.util.Timeout;
 
 /**
@@ -77,11 +77,12 @@ public class Request {
     private final ClassicHttpRequest request;
     private Boolean useExpectContinue;
     private Timeout connectTimeout;
+    private Timeout responseTimeout;
     private HttpHost proxy;
 
     private SimpleDateFormat dateFormatter;
 
-    public static Request create(final Methods method, final URI uri) {
+    public static Request create(final Method method, final URI uri) {
       return new Request(new HttpUriRequestBase(method.name(), uri));
   }
 
@@ -93,68 +94,68 @@ public class Request {
       return new Request(new HttpUriRequestBase(methodName, uri));
   }
 
-    public static Request Get(final URI uri) {
-       return new Request(ClassicHttpRequests.GET.create(uri));
+    public static Request get(final URI uri) {
+       return new Request(new BasicClassicHttpRequest(Method.GET, uri));
     }
 
-    public static Request Get(final String uri) {
-        return new Request(ClassicHttpRequests.GET.create(uri));
+    public static Request get(final String uri) {
+        return new Request(new BasicClassicHttpRequest(Method.GET, uri));
     }
 
-    public static Request Head(final URI uri) {
-        return new Request(ClassicHttpRequests.HEAD.create(uri));
+    public static Request head(final URI uri) {
+        return new Request(new BasicClassicHttpRequest(Method.HEAD, uri));
     }
 
-    public static Request Head(final String uri) {
-        return new Request(ClassicHttpRequests.HEAD.create(uri));
+    public static Request head(final String uri) {
+        return new Request(new BasicClassicHttpRequest(Method.HEAD, uri));
     }
 
-    public static Request Post(final URI uri) {
-        return new Request(ClassicHttpRequests.POST.create(uri));
+    public static Request post(final URI uri) {
+        return new Request(new BasicClassicHttpRequest(Method.POST, uri));
     }
 
-    public static Request Post(final String uri) {
-      return new Request(ClassicHttpRequests.POST.create(uri));
+    public static Request post(final String uri) {
+      return new Request(new BasicClassicHttpRequest(Method.POST, uri));
     }
 
-    public static Request Patch(final URI uri) {
-      return new Request(ClassicHttpRequests.PATCH.create(uri));
+    public static Request patch(final URI uri) {
+      return new Request(new BasicClassicHttpRequest(Method.PATCH, uri));
     }
 
-    public static Request Patch(final String uri) {
-      return new Request(ClassicHttpRequests.PATCH.create(uri));
+    public static Request patch(final String uri) {
+      return new Request(new BasicClassicHttpRequest(Method.PATCH, uri));
     }
 
-    public static Request Put(final URI uri) {
-      return new Request(ClassicHttpRequests.PUT.create(uri));
+    public static Request put(final URI uri) {
+      return new Request(new BasicClassicHttpRequest(Method.PUT, uri));
     }
 
-    public static Request Put(final String uri) {
-      return new Request(ClassicHttpRequests.PUT.create(uri));
+    public static Request put(final String uri) {
+      return new Request(new BasicClassicHttpRequest(Method.PUT, uri));
     }
 
-    public static Request Trace(final URI uri) {
-      return new Request(ClassicHttpRequests.TRACE.create(uri));
+    public static Request trace(final URI uri) {
+      return new Request(new BasicClassicHttpRequest(Method.TRACE, uri));
     }
 
-    public static Request Trace(final String uri) {
-      return new Request(ClassicHttpRequests.TRACE.create(uri));
+    public static Request trace(final String uri) {
+      return new Request(new BasicClassicHttpRequest(Method.TRACE, uri));
     }
 
-    public static Request Delete(final URI uri) {
-      return new Request(ClassicHttpRequests.DELETE.create(uri));
+    public static Request delete(final URI uri) {
+      return new Request(new BasicClassicHttpRequest(Method.DELETE, uri));
     }
 
-    public static Request Delete(final String uri) {
-      return new Request(ClassicHttpRequests.DELETE.create(uri));
+    public static Request delete(final String uri) {
+      return new Request(new BasicClassicHttpRequest(Method.DELETE, uri));
     }
 
-    public static Request Options(final URI uri) {
-      return new Request(ClassicHttpRequests.OPTIONS.create(uri));
+    public static Request options(final URI uri) {
+      return new Request(new BasicClassicHttpRequest(Method.OPTIONS, uri));
     }
 
-    public static Request Options(final String uri) {
-      return new Request(ClassicHttpRequests.OPTIONS.create(uri));
+    public static Request options(final String uri) {
+      return new Request(new BasicClassicHttpRequest(Method.OPTIONS, uri));
     }
 
     Request(final ClassicHttpRequest request) {
@@ -172,10 +173,13 @@ public class Request {
             builder = RequestConfig.custom();
         }
         if (this.useExpectContinue != null) {
-            builder.setExpectContinueEnabled(this.useExpectContinue);
+            builder.setExpectContinueEnabled(this.useExpectContinue.booleanValue());
         }
         if (this.connectTimeout != null) {
             builder.setConnectTimeout(this.connectTimeout);
+        }
+        if (this.responseTimeout != null) {
+            builder.setResponseTimeout(this.responseTimeout);
         }
         if (this.proxy != null) {
             builder.setProxy(this.proxy);
@@ -292,6 +296,11 @@ public class Request {
         return this;
     }
 
+    public Request responseTimeout(final Timeout timeout) {
+        this.responseTimeout = timeout;
+        return this;
+    }
+
     //// HTTP connection route operations
 
     public Request viaProxy(final HttpHost proxy) {
@@ -325,7 +334,7 @@ public class Request {
         }
         final ContentType contentType = charset != null ?
                 ContentType.APPLICATION_FORM_URLENCODED.withCharset(charset) : ContentType.APPLICATION_FORM_URLENCODED;
-        final String s = URLEncodedUtils.format(paramList, contentType.getCharset());
+        final String s = WWWFormCodec.format(paramList, contentType.getCharset());
         return bodyString(s, contentType);
     }
 

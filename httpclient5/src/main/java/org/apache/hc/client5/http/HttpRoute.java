@@ -141,8 +141,7 @@ public final class HttpRoute implements RouteInfo, Cloneable {
      *                  {@code false} otherwise
      */
     public HttpRoute(final HttpHost target, final InetAddress local, final boolean secure) {
-        this(target, local, Collections.<HttpHost>emptyList(), secure,
-                TunnelType.PLAIN, LayerType.PLAIN);
+        this(target, local, Collections.emptyList(), secure, TunnelType.PLAIN, LayerType.PLAIN);
     }
 
     /**
@@ -151,8 +150,7 @@ public final class HttpRoute implements RouteInfo, Cloneable {
      * @param target    the host to which to route
      */
     public HttpRoute(final HttpHost target) {
-        this(target, null, Collections.<HttpHost>emptyList(), false,
-                TunnelType.PLAIN, LayerType.PLAIN);
+        this(target, null, Collections.emptyList(), false, TunnelType.PLAIN, LayerType.PLAIN);
     }
 
     /**
@@ -188,63 +186,62 @@ public final class HttpRoute implements RouteInfo, Cloneable {
     }
 
     @Override
-    public final HttpHost getTargetHost() {
+    public HttpHost getTargetHost() {
         return this.targetHost;
     }
 
     @Override
-    public final InetAddress getLocalAddress() {
+    public InetAddress getLocalAddress() {
         return this.localAddress;
     }
 
-    public final InetSocketAddress getLocalSocketAddress() {
+    public InetSocketAddress getLocalSocketAddress() {
         return this.localAddress != null ? new InetSocketAddress(this.localAddress, 0) : null;
     }
 
     @Override
-    public final int getHopCount() {
+    public int getHopCount() {
         return proxyChain != null ? proxyChain.size() + 1 : 1;
     }
 
     @Override
-    public final HttpHost getHopTarget(final int hop) {
+    public HttpHost getHopTarget(final int hop) {
         Args.notNegative(hop, "Hop index");
         final int hopcount = getHopCount();
         Args.check(hop < hopcount, "Hop index exceeds tracked route length");
         if (hop < hopcount - 1) {
             return this.proxyChain.get(hop);
-        } else {
-            return this.targetHost;
         }
+        return this.targetHost;
     }
 
     @Override
-    public final HttpHost getProxyHost() {
+    public HttpHost getProxyHost() {
         return proxyChain != null && !this.proxyChain.isEmpty() ? this.proxyChain.get(0) : null;
     }
 
     @Override
-    public final TunnelType getTunnelType() {
+    public TunnelType getTunnelType() {
         return this.tunnelled;
     }
 
     @Override
-    public final boolean isTunnelled() {
+    public boolean isTunnelled() {
         return (this.tunnelled == TunnelType.TUNNELLED);
     }
 
     @Override
-    public final LayerType getLayerType() {
+    public LayerType getLayerType() {
         return this.layered;
     }
 
     @Override
-    public final boolean isLayered() {
+    public boolean isLayered() {
         return (this.layered == LayerType.LAYERED);
     }
 
     @Override
-    public final boolean isSecure() {
+    public boolean isSecure() {
         return this.secure;
     }
 
@@ -257,7 +254,7 @@ public final class HttpRoute implements RouteInfo, Cloneable {
      *          {@code false}
      */
     @Override
-    public final boolean equals(final Object obj) {
+    public boolean equals(final Object obj) {
         if (this == obj) {
             return true;
         }
@@ -282,7 +279,7 @@ public final class HttpRoute implements RouteInfo, Cloneable {
      * @return  the hash code
      */
     @Override
-    public final int hashCode() {
+    public int hashCode() {
         int hash = LangUtils.HASH_SEED;
         hash = LangUtils.hashCode(hash, this.targetHost);
         hash = LangUtils.hashCode(hash, this.localAddress);
@@ -303,7 +300,7 @@ public final class HttpRoute implements RouteInfo, Cloneable {
      * @return  a human-readable representation of this route
      */
     @Override
-    public final String toString() {
+    public String toString() {
         final StringBuilder cab = new StringBuilder(50 + getHopCount()*30);
         if (this.localAddress != null) {
             cab.append(this.localAddress);

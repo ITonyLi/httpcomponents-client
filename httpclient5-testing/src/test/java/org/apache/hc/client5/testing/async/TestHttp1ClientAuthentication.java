@@ -31,11 +31,13 @@ import java.util.Collection;
 import java.util.concurrent.Future;
 
 import org.apache.hc.client5.http.AuthenticationStrategy;
-import org.apache.hc.client5.http.async.methods.SimpleHttpRequests;
+import org.apache.hc.client5.http.async.methods.SimpleHttpRequest;
 import org.apache.hc.client5.http.async.methods.SimpleHttpResponse;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
+import org.apache.hc.client5.http.async.methods.SimpleRequestBuilder;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
 import org.apache.hc.client5.http.auth.AuthScope;
 import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
 import org.apache.hc.client5.http.impl.async.HttpAsyncClientBuilder;
@@ -45,8 +47,6 @@ import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.client5.http.ssl.DefaultClientTlsStrategy;
 import org.apache.hc.client5.testing.BasicTestAuthenticator;
 import org.apache.hc.client5.testing.SSLTestContexts;
-import org.apache.hc.core5.function.Decorator;
-import org.apache.hc.core5.function.Supplier;
 import org.apache.hc.core5.http.HeaderElements;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.HttpHost;
@@ -57,7 +57,6 @@ import org.apache.hc.core5.http.URIScheme;
 import org.apache.hc.core5.http.config.Http1Config;
 import org.apache.hc.core5.http.config.Lookup;
 import org.apache.hc.core5.http.impl.HttpProcessors;
-import org.apache.hc.core5.http.nio.AsyncServerExchangeHandler;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -86,6 +85,10 @@ public class TestHttp1ClientAuthentication extends AbstractHttpAsyncClientAuthen
         protected void before() throws Throwable {
             connManager = PoolingAsyncClientConnectionManagerBuilder.create()
                     .setTlsStrategy(new DefaultClientTlsStrategy(SSLTestContexts.createClientSSLContext()))
+                    .setDefaultConnectionConfig(ConnectionConfig.custom()
+                            .setConnectTimeout(TIMEOUT)
+                            .setSocketTimeout(TIMEOUT)
+                            .build())
                     .build();
         }
 
@@ -100,14 +103,13 @@ public class TestHttp1ClientAuthentication extends AbstractHttpAsyncClientAuthen
     };
 
     @Rule
-    public ExternalResource clientResource = new ExternalResource() {
+    public ExternalResource clientBuilderResource = new ExternalResource() {
 
         @Override
         protected void before() throws Throwable {
             clientBuilder = HttpAsyncClientBuilder.create()
                     .setDefaultRequestConfig(RequestConfig.custom()
                             .setConnectionRequestTimeout(TIMEOUT)
-                            .setConnectTimeout(TIMEOUT)
                             .build())
                     .setConnectionManager(connManager);
         }
@@ -119,7 +121,7 @@ public class TestHttp1ClientAuthentication extends AbstractHttpAsyncClientAuthen
     }
 
     @Override
-    void setDefaultAuthSchemeRegistry(final Lookup<AuthSchemeProvider> authSchemeRegistry) {
+    void setDefaultAuthSchemeRegistry(final Lookup<AuthSchemeFactory> authSchemeRegistry) {
         clientBuilder.setDefaultAuthSchemeRegistry(authSchemeRegistry);
     }
 
@@ -135,29 +137,15 @@ public class TestHttp1ClientAuthentication extends AbstractHttpAsyncClientAuthen
 
     @Test
     public void testBasicAuthenticationSuccessNonPersistentConnection() throws Exception {
-        server.register("*", new Supplier<AsyncServerExchangeHandler>() {
-
-            @Override
-            public AsyncServerExchangeHandler get() {
-                return new AsyncEchoHandler();
-            }
-
-        });
+        server.register("*", AsyncEchoHandler::new);
         final HttpHost target = start(
                 HttpProcessors.server(),
-                new Decorator<AsyncServerExchangeHandler>() {
+                exchangeHandler -> new AuthenticatingAsyncDecorator(exchangeHandler, new BasicTestAuthenticator("test:test", "test realm")) {
 
                     @Override
-                    public AsyncServerExchangeHandler decorate(final AsyncServerExchangeHandler exchangeHandler) {
-                        return new AuthenticatingAsyncDecorator(exchangeHandler, new BasicTestAuthenticator("test:test", "test realm")) {
-
-                            @Override
-                            protected void customizeUnauthorizedResponse(final HttpResponse unauthorized) {
-                                unauthorized.addHeader(HttpHeaders.CONNECTION, HeaderElements.CLOSE);
-                            }
-                        };
+                    protected void customizeUnauthorizedResponse(final HttpResponse unauthorized) {
+                        unauthorized.addHeader(HttpHeaders.CONNECTION, HeaderElements.CLOSE);
                     }
-
                 },
                 Http1Config.DEFAULT);
 
@@ -166,7 +154,11 @@ public class TestHttp1ClientAuthentication extends AbstractHttpAsyncClientAuthen
         final HttpClientContext context = HttpClientContext.create();
         context.setCredentialsProvider(credsProvider);
 
-        final Future<SimpleHttpResponse> future = httpclient.execute(SimpleHttpRequests.GET.create(target, "/"), context, null);
+        final SimpleHttpRequest request = SimpleRequestBuilder.get()
+                .setHttpHost(target)
+                .setPath("/")
+                .build();
+        final Future<SimpleHttpResponse> future = httpclient.execute(request, context, null);
         final HttpResponse response = future.get();
 
         Assert.assertNotNull(response);

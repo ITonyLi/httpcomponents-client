@@ -99,35 +99,38 @@ public class Executor {
         return this;
     }
 
-    public Executor auth(final AuthScope authScope, final Credentials creds) {
-        if (this.credentialsStore == null) {
-            this.credentialsStore = new BasicCredentialsProvider();
+    public Executor auth(final AuthScope authScope, final Credentials credentials) {
+        CredentialsStore credentialsStoreSnapshot = credentialsStore;
+        if (credentialsStoreSnapshot == null) {
+            credentialsStoreSnapshot = new BasicCredentialsProvider();
+            this.credentialsStore = credentialsStoreSnapshot;
         }
-        this.credentialsStore.setCredentials(authScope, creds);
+        credentialsStoreSnapshot.setCredentials(authScope, credentials);
         return this;
     }
 
-    public Executor auth(final HttpHost host, final Credentials creds) {
-        return auth(new AuthScope(host), creds);
+    public Executor auth(final HttpHost host, final Credentials credentials) {
+        return auth(new AuthScope(host), credentials);
     }
 
     /**
      * @since 4.4
      */
-    public Executor auth(final String host, final Credentials creds) {
+    public Executor auth(final String host, final Credentials credentials) {
         final HttpHost httpHost;
         try {
             httpHost = HttpHost.create(host);
         } catch (final URISyntaxException ex) {
             throw new IllegalArgumentException("Invalid host: " + host);
         }
-        return auth(httpHost, creds);
+        return auth(httpHost, credentials);
     }
 
     public Executor authPreemptive(final HttpHost host) {
-        if (this.credentialsStore != null) {
-            final Credentials credentials = this.credentialsStore.getCredentials(new AuthScope(host), null);
-            if (credentials == null) {
+        final CredentialsStore credentialsStoreSnapshot = credentialsStore;
+        if (credentialsStoreSnapshot != null) {
+            final Credentials credentials = credentialsStoreSnapshot.getCredentials(new AuthScope(host), null);
+            if (credentials != null) {
                 final BasicScheme basicScheme = new BasicScheme();
                 basicScheme.initPreemptive(credentials);
                 this.authCache.put(host, basicScheme);
@@ -150,9 +153,10 @@ public class Executor {
     }
 
     public Executor authPreemptiveProxy(final HttpHost proxy) {
-        if (this.credentialsStore != null) {
-            final Credentials credentials = this.credentialsStore.getCredentials(new AuthScope(proxy), null);
-            if (credentials == null) {
+        final CredentialsStore credentialsStoreSnapshot = credentialsStore;
+        if (credentialsStoreSnapshot != null) {
+            final Credentials credentials = credentialsStoreSnapshot.getCredentials(new AuthScope(proxy), null);
+            if (credentials != null) {
                 final BasicScheme basicScheme = new BasicScheme();
                 basicScheme.initPreemptive(credentials);
                 this.authCache.put(proxy, basicScheme);
@@ -186,8 +190,9 @@ public class Executor {
     }
 
     public Executor clearAuth() {
-        if (this.credentialsStore != null) {
-            this.credentialsStore.clear();
+        final CredentialsStore credentialsStoreSnapshot = credentialsStore;
+        if (credentialsStoreSnapshot != null) {
+            credentialsStoreSnapshot.clear();
         }
         return this;
     }
@@ -201,8 +206,9 @@ public class Executor {
     }
 
     public Executor clearCookies() {
-        if (this.cookieStore != null) {
-            this.cookieStore.clear();
+        final CookieStore cookieStoreSnapshot = cookieStore;
+        if (cookieStoreSnapshot != null) {
+            cookieStoreSnapshot.clear();
         }
         return this;
     }
@@ -218,14 +224,16 @@ public class Executor {
     public Response execute(
             final Request request) throws IOException {
         final HttpClientContext localContext = HttpClientContext.create();
-        if (this.credentialsStore != null) {
-            localContext.setAttribute(HttpClientContext.CREDS_PROVIDER, this.credentialsStore);
+        final CredentialsStore credentialsStoreSnapshot = credentialsStore;
+        if (credentialsStoreSnapshot != null) {
+            localContext.setAttribute(HttpClientContext.CREDS_PROVIDER, credentialsStoreSnapshot);
         }
         if (this.authCache != null) {
             localContext.setAttribute(HttpClientContext.AUTH_CACHE, this.authCache);
         }
-        if (this.cookieStore != null) {
-            localContext.setAttribute(HttpClientContext.COOKIE_STORE, this.cookieStore);
+        final CookieStore cookieStoreSnapshot = cookieStore;
+        if (cookieStoreSnapshot != null) {
+            localContext.setAttribute(HttpClientContext.COOKIE_STORE, cookieStoreSnapshot);
         }
         return new Response(request.internalExecute(this.httpclient, localContext));
     }

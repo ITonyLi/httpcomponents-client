@@ -29,6 +29,7 @@ package org.apache.hc.client5.testing.sync;
 
 import java.io.IOException;
 
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
@@ -39,6 +40,7 @@ import org.apache.hc.client5.testing.classic.RandomHandler;
 import org.apache.hc.core5.function.Decorator;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.URIScheme;
+import org.apache.hc.core5.http.config.Http1Config;
 import org.apache.hc.core5.http.io.HttpServerRequestHandler;
 import org.apache.hc.core5.http.io.SocketConfig;
 import org.apache.hc.core5.http.protocol.HttpProcessor;
@@ -109,10 +111,13 @@ public abstract class LocalServerTestBase {
             connManager.setDefaultSocketConfig(SocketConfig.custom()
                     .setSoTimeout(TIMEOUT)
                     .build());
+            connManager.setDefaultConnectionConfig(ConnectionConfig.custom()
+                    .setConnectTimeout(TIMEOUT)
+                    .build());
+
             clientBuilder = HttpClientBuilder.create()
                     .setDefaultRequestConfig(RequestConfig.custom()
                             .setConnectionRequestTimeout(TIMEOUT)
-                            .setConnectTimeout(TIMEOUT)
                             .build())
                     .setConnectionManager(connManager);
         }
@@ -126,9 +131,10 @@ public abstract class LocalServerTestBase {
     };
 
     public HttpHost start(
+            final Http1Config http1Config,
             final HttpProcessor httpProcessor,
             final Decorator<HttpServerRequestHandler> handlerDecorator) throws IOException {
-        this.server.start(httpProcessor, handlerDecorator);
+        this.server.start(http1Config, httpProcessor, handlerDecorator);
 
         if (this.httpclient == null) {
             this.httpclient = this.clientBuilder.build();
@@ -137,8 +143,14 @@ public abstract class LocalServerTestBase {
         return new HttpHost(this.scheme.name(), "localhost", this.server.getPort());
     }
 
+    public HttpHost start(
+            final HttpProcessor httpProcessor,
+            final Decorator<HttpServerRequestHandler> handlerDecorator) throws IOException {
+        return start(null, httpProcessor, handlerDecorator);
+    }
+
     public HttpHost start() throws Exception {
-        return start(null, null);
+        return start(null, null, null);
     }
 
 }

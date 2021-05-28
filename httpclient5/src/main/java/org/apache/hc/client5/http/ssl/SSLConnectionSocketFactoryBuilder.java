@@ -93,7 +93,7 @@ public class SSLConnectionSocketFactoryBuilder {
     public final SSLConnectionSocketFactoryBuilder setTlsVersions(final TLS... tlslVersions) {
         this.tlsVersions = new String[tlslVersions.length];
         for (int i = 0; i < tlslVersions.length; i++) {
-            this.tlsVersions[i] = tlslVersions[i].ident;
+            this.tlsVersions[i] = tlslVersions[i].id;
         }
         return this;
     }
@@ -125,14 +125,14 @@ public class SSLConnectionSocketFactoryBuilder {
     }
 
     public SSLConnectionSocketFactory build() {
-        final javax.net.ssl.SSLSocketFactory socketfactory;
+        final javax.net.ssl.SSLSocketFactory socketFactory;
         if (sslContext != null) {
-            socketfactory = sslContext.getSocketFactory();
+            socketFactory = sslContext.getSocketFactory();
         } else {
             if (systemProperties) {
-                socketfactory = (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
+                socketFactory = (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
             } else {
-                socketfactory = SSLContexts.createDefault().getSocketFactory();
+                socketFactory = SSLContexts.createDefault().getSocketFactory();
             }
         }
         final String[] tlsVersionsCopy;
@@ -148,7 +148,7 @@ public class SSLConnectionSocketFactoryBuilder {
             ciphersCopy = systemProperties ? HttpsSupport.getSystemCipherSuits() : null;
         }
         return new SSLConnectionSocketFactory(
-                socketfactory,
+                socketFactory,
                 tlsVersionsCopy,
                 ciphersCopy,
                 hostnameVerifier != null ? hostnameVerifier : HttpsSupport.getDefaultHostnameVerifier());

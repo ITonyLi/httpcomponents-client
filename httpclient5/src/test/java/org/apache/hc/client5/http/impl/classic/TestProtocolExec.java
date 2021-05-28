@@ -32,17 +32,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.Collections;
-import java.util.Map;
 
 import org.apache.hc.client5.http.AuthenticationStrategy;
 import org.apache.hc.client5.http.HttpRoute;
-import org.apache.hc.client5.http.auth.AuthChallenge;
 import org.apache.hc.client5.http.auth.AuthExchange;
-import org.apache.hc.client5.http.auth.AuthScheme;
 import org.apache.hc.client5.http.auth.AuthScope;
 import org.apache.hc.client5.http.auth.ChallengeType;
 import org.apache.hc.client5.http.auth.Credentials;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
 import org.apache.hc.client5.http.classic.ExecChain;
 import org.apache.hc.client5.http.classic.ExecRuntime;
@@ -55,24 +53,23 @@ import org.apache.hc.client5.http.impl.auth.NTLMScheme;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ClassicHttpResponse;
-import org.apache.hc.core5.http.EntityDetails;
 import org.apache.hc.core5.http.HttpException;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.HttpResponse;
 import org.apache.hc.core5.http.message.BasicClassicHttpResponse;
-import org.apache.hc.core5.http.protocol.HttpContext;
 import org.apache.hc.core5.http.protocol.HttpProcessor;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.stubbing.Answer;
 
 @SuppressWarnings({"static-access"}) // test code
+@RunWith(MockitoJUnitRunner.class)
 public class TestProtocolExec {
 
     @Mock
@@ -92,7 +89,6 @@ public class TestProtocolExec {
 
     @Before
     public void setup() throws Exception {
-        MockitoAnnotations.initMocks(this);
         protocolExec = new ProtocolExec(httpProcessor, targetAuthStrategy, proxyAuthStrategy);
         target = new HttpHost("foo", 80);
         proxy = new HttpHost("bar", 8888);
@@ -107,8 +103,8 @@ public class TestProtocolExec {
         final ClassicHttpResponse response = Mockito.mock(ClassicHttpResponse.class);
 
         Mockito.when(chain.proceed(
-                Mockito.<ClassicHttpRequest>any(),
-                Mockito.<ExecChain.Scope>any())).thenReturn(response);
+                Mockito.any(),
+                Mockito.any())).thenReturn(response);
 
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, execRuntime, context);
         protocolExec.execute(request, scope, chain);
@@ -131,8 +127,8 @@ public class TestProtocolExec {
 
         final ClassicHttpResponse response = Mockito.mock(ClassicHttpResponse.class);
         Mockito.when(chain.proceed(
-                Mockito.<ClassicHttpRequest>any(),
-                Mockito.<ExecChain.Scope>any())).thenReturn(response);
+                Mockito.any(),
+                Mockito.any())).thenReturn(response);
 
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, execRuntime, context);
         protocolExec.execute(request, scope, chain);
@@ -143,7 +139,7 @@ public class TestProtocolExec {
         Assert.assertEquals("somefella", creds.getUserPrincipal().getName());
     }
 
-    @Test(expected = HttpException.class)
+    @Test
     public void testPostProcessHttpException() throws Exception {
         final HttpRoute route = new HttpRoute(target);
         final ClassicHttpRequest request = new HttpGet("/test");
@@ -152,20 +148,17 @@ public class TestProtocolExec {
         final ClassicHttpResponse response = Mockito.mock(ClassicHttpResponse.class);
 
         Mockito.when(chain.proceed(
-                Mockito.<ClassicHttpRequest>any(),
-                Mockito.<ExecChain.Scope>any())).thenReturn(response);
+                Mockito.any(),
+                Mockito.any())).thenReturn(response);
         Mockito.doThrow(new HttpException("Ooopsie")).when(httpProcessor).process(
-                Mockito.same(response), Mockito.<EntityDetails>isNull(), Mockito.<HttpContext>any());
+                Mockito.same(response), Mockito.isNull(), Mockito.any());
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, execRuntime, context);
-        try {
-            protocolExec.execute(request, scope, chain);
-        } catch (final Exception ex) {
-            Mockito.verify(execRuntime).discardEndpoint();
-            throw ex;
-        }
+        Assert.assertThrows(HttpException.class, () ->
+                protocolExec.execute(request, scope, chain));
+        Mockito.verify(execRuntime).discardEndpoint();
     }
 
-    @Test(expected = IOException.class)
+    @Test
     public void testPostProcessIOException() throws Exception {
         final HttpRoute route = new HttpRoute(target);
         final ClassicHttpRequest request = new HttpGet("/test");
@@ -173,20 +166,17 @@ public class TestProtocolExec {
 
         final ClassicHttpResponse response = Mockito.mock(ClassicHttpResponse.class);
         Mockito.when(chain.proceed(
-                Mockito.<ClassicHttpRequest>any(),
-                Mockito.<ExecChain.Scope>any())).thenReturn(response);
+                Mockito.any(),
+                Mockito.any())).thenReturn(response);
         Mockito.doThrow(new IOException("Ooopsie")).when(httpProcessor).process(
-                Mockito.same(response), Mockito.<EntityDetails>isNull(), Mockito.<HttpContext>any());
+                Mockito.same(response), Mockito.isNull(), Mockito.any());
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, execRuntime, context);
-        try {
-            protocolExec.execute(request, scope, chain);
-        } catch (final Exception ex) {
-            Mockito.verify(execRuntime).discardEndpoint();
-            throw ex;
-        }
+        Assert.assertThrows(IOException.class, () ->
+                protocolExec.execute(request, scope, chain));
+        Mockito.verify(execRuntime).discardEndpoint();
     }
 
-    @Test(expected = RuntimeException.class)
+    @Test
     public void testPostProcessRuntimeException() throws Exception {
         final HttpRoute route = new HttpRoute(target);
         final ClassicHttpRequest request = new HttpGet("/test");
@@ -194,17 +184,14 @@ public class TestProtocolExec {
 
         final ClassicHttpResponse response = Mockito.mock(ClassicHttpResponse.class);
         Mockito.when(chain.proceed(
-                Mockito.<ClassicHttpRequest>any(),
-                Mockito.<ExecChain.Scope>any())).thenReturn(response);
+                Mockito.any(),
+                Mockito.any())).thenReturn(response);
         Mockito.doThrow(new RuntimeException("Ooopsie")).when(httpProcessor).process(
-                Mockito.same(response), Mockito.<EntityDetails>isNull(), Mockito.<HttpContext>any());
+                Mockito.same(response), Mockito.isNull(), Mockito.any());
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, execRuntime, context);
-        try {
-            protocolExec.execute(request, scope, chain);
-        } catch (final Exception ex) {
-            Mockito.verify(execRuntime).discardEndpoint();
-            throw ex;
-        }
+        Assert.assertThrows(RuntimeException.class, () ->
+                protocolExec.execute(request, scope, chain));
+        Mockito.verify(execRuntime).discardEndpoint();
     }
 
     @Test
@@ -213,7 +200,7 @@ public class TestProtocolExec {
         final HttpClientContext context = new HttpClientContext();
         final ClassicHttpRequest request = new HttpGet("http://foo/test");
         final ClassicHttpResponse response1 = new BasicClassicHttpResponse(401, "Huh?");
-        response1.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Basic realm=test");
+        response1.setHeader(HttpHeaders.WWW_AUTHENTICATE, StandardAuthScheme.BASIC + " realm=test");
         final InputStream inStream1 = Mockito.spy(new ByteArrayInputStream(new byte[] {1, 2, 3}));
         response1.setEntity(EntityBuilder.create()
                 .setStream(inStream1)
@@ -230,11 +217,11 @@ public class TestProtocolExec {
 
         Mockito.when(chain.proceed(
                 Mockito.same(request),
-                Mockito.<ExecChain.Scope>any())).thenReturn(response1, response2);
+                Mockito.any())).thenReturn(response1, response2);
         Mockito.when(targetAuthStrategy.select(
                 Mockito.eq(ChallengeType.TARGET),
-                Mockito.<Map<String, AuthChallenge>>any(),
-                Mockito.<HttpClientContext>any())).thenReturn(Collections.<AuthScheme>singletonList(new BasicScheme()));
+                Mockito.any(),
+                Mockito.<HttpClientContext>any())).thenReturn(Collections.singletonList(new BasicScheme()));
         Mockito.when(execRuntime.isConnectionReusable()).thenReturn(true);
 
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, execRuntime, context);
@@ -249,10 +236,10 @@ public class TestProtocolExec {
 
     @Test
     public void testExecEntityEnclosingRequestRetryOnAuthChallenge() throws Exception {
-        final HttpRoute route = new HttpRoute(target, proxy);
+        final HttpRoute route = new HttpRoute(target);
         final ClassicHttpRequest request = new HttpGet("http://foo/test");
         final ClassicHttpResponse response1 = new BasicClassicHttpResponse(401, "Huh?");
-        response1.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Basic realm=test");
+        response1.setHeader(HttpHeaders.WWW_AUTHENTICATE, StandardAuthScheme.BASIC + " realm=test");
         final InputStream inStream1 = Mockito.spy(new ByteArrayInputStream(new byte[] {1, 2, 3}));
         response1.setEntity(EntityBuilder.create()
                 .setStream(inStream1)
@@ -265,10 +252,10 @@ public class TestProtocolExec {
 
         final HttpClientContext context = new HttpClientContext();
 
-        final AuthExchange proxyAuthExchange = new AuthExchange();
-        proxyAuthExchange.setState(AuthExchange.State.SUCCESS);
-        proxyAuthExchange.select(new NTLMScheme());
-        context.setAuthExchange(proxy, proxyAuthExchange);
+        final AuthExchange authExchange = new AuthExchange();
+        authExchange.setState(AuthExchange.State.SUCCESS);
+        authExchange.select(new NTLMScheme());
+        context.setAuthExchange(target, authExchange);
 
         final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
         credentialsProvider.setCredentials(new AuthScope(target), new UsernamePasswordCredentials("user", "pass".toCharArray()));
@@ -276,12 +263,12 @@ public class TestProtocolExec {
 
         Mockito.when(chain.proceed(
                 Mockito.same(request),
-                Mockito.<ExecChain.Scope>any())).thenReturn(response1, response2);
+                Mockito.any())).thenReturn(response1, response2);
 
         Mockito.when(targetAuthStrategy.select(
                 Mockito.eq(ChallengeType.TARGET),
-                Mockito.<Map<String, AuthChallenge>>any(),
-                Mockito.<HttpClientContext>any())).thenReturn(Collections.<AuthScheme>singletonList(new BasicScheme()));
+                Mockito.any(),
+                Mockito.<HttpClientContext>any())).thenReturn(Collections.singletonList(new BasicScheme()));
 
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, execRuntime, context);
         final ClassicHttpResponse finalResponse = protocolExec.execute(request, scope, chain);
@@ -291,7 +278,7 @@ public class TestProtocolExec {
 
         Assert.assertNotNull(finalResponse);
         Assert.assertEquals(200, finalResponse.getCode());
-        Assert.assertNull(proxyAuthExchange.getAuthScheme());
+        Assert.assertNotNull(authExchange.getAuthScheme());
     }
 
     @Test
@@ -304,7 +291,7 @@ public class TestProtocolExec {
                 .setStream(inStream0)
                 .build());
         final ClassicHttpResponse response1 = new BasicClassicHttpResponse(401, "Huh?");
-        response1.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Basic realm=test");
+        response1.setHeader(HttpHeaders.WWW_AUTHENTICATE, StandardAuthScheme.BASIC + " realm=test");
         final InputStream inStream1 = new ByteArrayInputStream(new byte[] {1, 2, 3});
         response1.setEntity(EntityBuilder.create()
                 .setStream(inStream1)
@@ -316,22 +303,12 @@ public class TestProtocolExec {
 
         Mockito.when(chain.proceed(
                 Mockito.same(request),
-                Mockito.<ExecChain.Scope>any())).thenAnswer(new Answer<HttpResponse>() {
-
-            @Override
-            public HttpResponse answer(final InvocationOnMock invocationOnMock) throws Throwable {
-                final Object[] args = invocationOnMock.getArguments();
-                final ClassicHttpRequest requestEE = (ClassicHttpRequest) args[0];
-                requestEE.getEntity().writeTo(new ByteArrayOutputStream());
-                return response1;
-            }
-
-        });
-
-        Mockito.when(targetAuthStrategy.select(
-                Mockito.eq(ChallengeType.TARGET),
-                Mockito.<Map<String, AuthChallenge>>any(),
-                Mockito.<HttpClientContext>any())).thenReturn(Collections.<AuthScheme>singletonList(new BasicScheme()));
+                Mockito.any())).thenAnswer((Answer<HttpResponse>) invocationOnMock -> {
+                    final Object[] args = invocationOnMock.getArguments();
+                    final ClassicHttpRequest requestEE = (ClassicHttpRequest) args[0];
+                    requestEE.getEntity().writeTo(new ByteArrayOutputStream());
+                    return response1;
+                });
 
         final ExecChain.Scope scope = new ExecChain.Scope("test", route, request, execRuntime, context);
         final ClassicHttpResponse response = protocolExec.execute(request, scope, chain);

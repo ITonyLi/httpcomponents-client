@@ -101,16 +101,15 @@ public class ConscryptClientTlsStrategy extends AbstractClientTlsStrategy {
     TlsDetails createTlsDetails(final SSLEngine sslEngine) {
         if (Conscrypt.isConscrypt(sslEngine)) {
             return new TlsDetails(sslEngine.getSession(), Conscrypt.getApplicationProtocol(sslEngine));
-        } else {
-            return null;
         }
+        return null;
     }
 
     public static boolean isSupported() {
         try {
             final Class<?> clazz = Class.forName("org.conscrypt.Conscrypt");
             final Method method = clazz.getMethod("isAvailable");
-            return (Boolean) method.invoke(null);
+            return ((Boolean) method.invoke(null)).booleanValue();
         } catch (final ClassNotFoundException | NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
             return false;
         }

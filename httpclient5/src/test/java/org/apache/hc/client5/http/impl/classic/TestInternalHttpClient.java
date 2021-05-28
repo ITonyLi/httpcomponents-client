@@ -32,18 +32,16 @@ import java.util.Arrays;
 
 import org.apache.hc.client5.http.ClientProtocolException;
 import org.apache.hc.client5.http.HttpRoute;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
-import org.apache.hc.client5.http.classic.ExecChain;
 import org.apache.hc.client5.http.classic.ExecChainHandler;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.RequestConfig;
-import org.apache.hc.client5.http.cookie.CookieSpecProvider;
+import org.apache.hc.client5.http.cookie.CookieSpecFactory;
 import org.apache.hc.client5.http.cookie.CookieStore;
 import org.apache.hc.client5.http.io.HttpClientConnectionManager;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.client5.http.routing.HttpRoutePlanner;
-import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.HttpException;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.config.Lookup;
@@ -51,14 +49,16 @@ import org.apache.hc.core5.http.impl.io.HttpRequestExecutor;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnitRunner;
 
 /**
  *  Simple tests for {@link InternalHttpClient}.
  */
 @SuppressWarnings({"static-access"}) // test code
+@RunWith(MockitoJUnitRunner.class)
 public class TestInternalHttpClient {
 
     @Mock
@@ -70,9 +70,9 @@ public class TestInternalHttpClient {
     @Mock
     private HttpRoutePlanner routePlanner;
     @Mock
-    private Lookup<CookieSpecProvider> cookieSpecRegistry;
+    private Lookup<CookieSpecFactory> cookieSpecRegistry;
     @Mock
-    private Lookup<AuthSchemeProvider> authSchemeRegistry;
+    private Lookup<AuthSchemeFactory> authSchemeRegistry;
     @Mock
     private CookieStore cookieStore;
     @Mock
@@ -88,7 +88,6 @@ public class TestInternalHttpClient {
 
     @Before
     public void setup() throws Exception {
-        MockitoAnnotations.initMocks(this);
         client = new InternalHttpClient(connManager, requestExecutor, new ExecChainElement(execChain, null), routePlanner,
                 cookieSpecRegistry, authSchemeRegistry, cookieStore, credentialsProvider,
                 defaultConfig, Arrays.asList(closeable1, closeable2));
@@ -107,12 +106,12 @@ public class TestInternalHttpClient {
         client.execute(httpget);
 
         Mockito.verify(execChain).execute(
-                Mockito.<ClassicHttpRequest>any(),
-                Mockito.<ExecChain.Scope>any(),
-                Mockito.<ExecChain>any());
+                Mockito.any(),
+                Mockito.any(),
+                Mockito.any());
     }
 
-    @Test(expected=ClientProtocolException.class)
+    @Test
     public void testExecuteHttpException() throws Exception {
         final HttpGet httpget = new HttpGet("http://somehost/stuff");
         final HttpRoute route = new HttpRoute(new HttpHost("somehost", 80));
@@ -121,11 +120,12 @@ public class TestInternalHttpClient {
                 Mockito.eq(new HttpHost("somehost")),
                 Mockito.<HttpClientContext>any())).thenReturn(route);
         Mockito.when(execChain.execute(
-                Mockito.<ClassicHttpRequest>any(),
-                Mockito.<ExecChain.Scope>any(),
-                Mockito.<ExecChain>any())).thenThrow(new HttpException());
+                Mockito.any(),
+                Mockito.any(),
+                Mockito.any())).thenThrow(new HttpException());
 
-        client.execute(httpget);
+        Assert.assertThrows(ClientProtocolException.class, () ->
+                client.execute(httpget));
     }
 
     @Test
@@ -175,8 +175,8 @@ public class TestInternalHttpClient {
 
         final HttpClientContext context = HttpClientContext.create();
 
-        final Lookup<CookieSpecProvider> localCookieSpecRegistry = Mockito.mock(Lookup.class);
-        final Lookup<AuthSchemeProvider> localAuthSchemeRegistry = Mockito.mock(Lookup.class);
+        final Lookup<CookieSpecFactory> localCookieSpecRegistry = Mockito.mock(Lookup.class);
+        final Lookup<AuthSchemeFactory> localAuthSchemeRegistry = Mockito.mock(Lookup.class);
         final CookieStore localCookieStore = Mockito.mock(CookieStore.class);
         final CredentialsProvider localCredentialsProvider = Mockito.mock(CredentialsProvider.class);
         final RequestConfig localConfig = RequestConfig.custom().build();

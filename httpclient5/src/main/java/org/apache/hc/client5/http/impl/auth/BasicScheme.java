@@ -42,18 +42,22 @@ import java.util.Map;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.hc.client5.http.auth.AuthChallenge;
 import org.apache.hc.client5.http.auth.AuthScheme;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.auth.AuthScope;
 import org.apache.hc.client5.http.auth.AuthStateCacheable;
 import org.apache.hc.client5.http.auth.AuthenticationException;
 import org.apache.hc.client5.http.auth.Credentials;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
 import org.apache.hc.client5.http.auth.MalformedChallengeException;
+import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.client5.http.utils.ByteArrayBuilder;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.HttpRequest;
 import org.apache.hc.core5.http.NameValuePair;
 import org.apache.hc.core5.http.protocol.HttpContext;
 import org.apache.hc.core5.util.Args;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Basic authentication scheme as defined in RFC 2617.
@@ -64,6 +68,8 @@ import org.apache.hc.core5.util.Args;
 public class BasicScheme implements AuthScheme, Serializable {
 
     private static final long serialVersionUID = -1931571557597830536L;
+
+    private static final Logger LOG = LoggerFactory.getLogger(BasicScheme.class);
 
     private final Map<String, String> paramMap;
     private transient Charset charset;
@@ -99,7 +105,7 @@ public class BasicScheme implements AuthScheme, Serializable {
 
     @Override
     public String getName() {
-        return "basic";
+        return StandardAuthScheme.BASIC;
     }
 
     @Override
@@ -140,12 +146,19 @@ public class BasicScheme implements AuthScheme, Serializable {
         Args.notNull(host, "Auth host");
         Args.notNull(credentialsProvider, "CredentialsProvider");
 
+        final AuthScope authScope = new AuthScope(host, getRealm(), getName());
         final Credentials credentials = credentialsProvider.getCredentials(
-                new AuthScope(host, getRealm(), getName()), context);
+                authScope, context);
         if (credentials != null) {
             this.username = credentials.getUserPrincipal().getName();
             this.password = credentials.getPassword();
             return true;
+        }
+
+        if (LOG.isDebugEnabled()) {
+            final HttpClientContext clientContext = HttpClientContext.adapt(context);
+            final String exchangeId = clientContext.getExchangeId();
+            LOG.debug("{} No credentials found for auth scope [{}]", exchangeId, authScope);
         }
         this.username = null;
         this.password = null;
@@ -173,7 +186,7 @@ public class BasicScheme implements AuthScheme, Serializable {
         }
         final byte[] encodedCreds = this.base64codec.encode(this.buffer.toByteArray());
         this.buffer.reset();
-        return "Basic " + new String(encodedCreds, 0, encodedCreds.length, StandardCharsets.US_ASCII);
+        return StandardAuthScheme.BASIC + " " + new String(encodedCreds, 0, encodedCreds.length, StandardCharsets.US_ASCII);
     }
 
     private void writeObject(final ObjectOutputStream out) throws IOException {
@@ -196,7 +209,7 @@ public class BasicScheme implements AuthScheme, Serializable {
 
     @Override
     public String toString() {
-        return getName() + this.paramMap.toString();
+        return getName() + this.paramMap;
     }
 
 }

@@ -28,13 +28,13 @@ package org.apache.hc.client5.http.impl.auth;
 
 import java.net.UnknownHostException;
 import java.security.Principal;
-import java.util.Locale;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.hc.client5.http.DnsResolver;
 import org.apache.hc.client5.http.SystemDefaultDnsResolver;
 import org.apache.hc.client5.http.auth.AuthChallenge;
 import org.apache.hc.client5.http.auth.AuthScheme;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.auth.AuthScope;
 import org.apache.hc.client5.http.auth.AuthenticationException;
 import org.apache.hc.client5.http.auth.Credentials;
@@ -43,6 +43,7 @@ import org.apache.hc.client5.http.auth.InvalidCredentialsException;
 import org.apache.hc.client5.http.auth.KerberosConfig;
 import org.apache.hc.client5.http.auth.KerberosCredentials;
 import org.apache.hc.client5.http.auth.MalformedChallengeException;
+import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.HttpRequest;
 import org.apache.hc.core5.http.protocol.HttpContext;
@@ -70,8 +71,9 @@ public abstract class GGSSchemeBase implements AuthScheme {
         FAILED,
     }
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
-
+    private static final Logger LOG = LoggerFactory.getLogger(GGSSchemeBase.class);
+    private static final String NO_TOKEN = "";
+    private static final String KERBEROS_SCHEME = "HTTP";
     private final KerberosConfig config;
     private final DnsResolver dnsResolver;
 
@@ -106,15 +108,18 @@ public abstract class GGSSchemeBase implements AuthScheme {
             final AuthChallenge authChallenge,
             final HttpContext context) throws MalformedChallengeException {
         Args.notNull(authChallenge, "AuthChallenge");
-        if (authChallenge.getValue() == null) {
-            throw new MalformedChallengeException("Missing auth challenge");
-        }
-        this.challenge = authChallenge.getValue();
+
+        this.challenge = authChallenge.getValue() != null ? authChallenge.getValue() : NO_TOKEN;
+
         if (state == State.UNINITIATED) {
             token = Base64.decodeBase64(challenge.getBytes());
             state = State.CHALLENGE_RECEIVED;
         } else {
-            log.debug("Authentication already attempted");
+            if (LOG.isDebugEnabled()) {
+                final HttpClientContext clientContext = HttpClientContext.adapt(context);
+                final String exchangeId = clientContext.getExchangeId();
+                LOG.debug("{} Authentication already attempted", exchangeId);
+            }
             state = State.FAILED;
         }
     }
@@ -216,12 +221,13 @@ public abstract class GGSSchemeBase implements AuthScheme {
                 } else {
                     authServer = hostname + ":" + host.getPort();
                 }
-                final String serviceName = host.getSchemeName().toUpperCase(Locale.ROOT);
 
-                if (log.isDebugEnabled()) {
-                    log.debug("init " + authServer);
+                if (LOG.isDebugEnabled()) {
+                    final HttpClientContext clientContext = HttpClientContext.adapt(context);
+                    final String exchangeId = clientContext.getExchangeId();
+                    LOG.debug("{} init {}", exchangeId, authServer);
                 }
-                token = generateToken(token, serviceName, authServer);
+                token = generateToken(token, KERBEROS_SCHEME, authServer);
                 state = State.TOKEN_GENERATED;
             } catch (final GSSException gsse) {
                 state = State.FAILED;
@@ -243,10 +249,12 @@ public abstract class GGSSchemeBase implements AuthScheme {
         case TOKEN_GENERATED:
             final Base64 codec = new Base64(0);
             final String tokenstr = new String(codec.encode(token));
-            if (log.isDebugEnabled()) {
-                log.debug("Sending response '" + tokenstr + "' back to the auth server");
+            if (LOG.isDebugEnabled()) {
+                final HttpClientContext clientContext = HttpClientContext.adapt(context);
+                final String exchangeId = clientContext.getExchangeId();
+                LOG.debug("{} Sending response '{}' back to the auth server", exchangeId, tokenstr);
             }
-            return "Negotiate " + tokenstr;
+            return StandardAuthScheme.SPNEGO + " " + tokenstr;
         default:
             throw new IllegalStateException("Illegal state: " + state);
         }

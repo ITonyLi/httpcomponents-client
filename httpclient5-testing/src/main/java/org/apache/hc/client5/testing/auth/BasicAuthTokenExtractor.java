@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import org.apache.commons.codec.BinaryDecoder;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.core5.http.HttpException;
 import org.apache.hc.core5.http.ProtocolException;
 
@@ -43,15 +44,15 @@ public class BasicAuthTokenExtractor {
             if (i == -1) {
                 throw new ProtocolException("Invalid challenge response: " + challengeResponse);
             }
-            final String authscheme = challengeResponse.substring(0, i);
-            if (authscheme.equalsIgnoreCase("basic")) {
+            final String schemeName = challengeResponse.substring(0, i);
+            if (schemeName.equalsIgnoreCase(StandardAuthScheme.BASIC)) {
                 final String s = challengeResponse.substring(i + 1).trim();
                 try {
                     final byte[] credsRaw = s.getBytes(StandardCharsets.US_ASCII);
                     final BinaryDecoder codec = new Base64();
                     return new String(codec.decode(credsRaw), StandardCharsets.US_ASCII);
                 } catch (final DecoderException ex) {
-                    throw new ProtocolException("Malformed BASIC credentials");
+                    throw new ProtocolException("Malformed Basic credentials");
                 }
             }
         }

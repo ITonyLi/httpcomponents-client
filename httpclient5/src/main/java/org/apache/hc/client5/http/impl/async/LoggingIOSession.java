@@ -34,40 +34,26 @@ import java.nio.channels.ByteChannel;
 import java.nio.channels.SelectionKey;
 import java.util.concurrent.locks.Lock;
 
-import javax.net.ssl.SSLContext;
-
-import org.apache.hc.client5.http.impl.Wire;
+import org.apache.hc.core5.http.Chars;
 import org.apache.hc.core5.io.CloseMode;
-import org.apache.hc.core5.net.NamedEndpoint;
 import org.apache.hc.core5.reactor.Command;
 import org.apache.hc.core5.reactor.IOEventHandler;
-import org.apache.hc.core5.reactor.ProtocolIOSession;
-import org.apache.hc.core5.reactor.ssl.SSLBufferMode;
-import org.apache.hc.core5.reactor.ssl.SSLSessionInitializer;
-import org.apache.hc.core5.reactor.ssl.SSLSessionVerifier;
-import org.apache.hc.core5.reactor.ssl.TlsDetails;
+import org.apache.hc.core5.reactor.IOSession;
+import org.apache.hc.core5.util.Args;
 import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 
-class LoggingIOSession implements ProtocolIOSession {
+class LoggingIOSession implements IOSession {
 
     private final Logger log;
-    private final Wire wireLog;
-    private final String id;
-    private final ProtocolIOSession session;
-    private final ByteChannel channel;
+    private final Logger wireLog;
+    private final IOSession session;
 
-    public LoggingIOSession(final ProtocolIOSession session, final String id, final Logger log, final Logger wireLog) {
+    public LoggingIOSession(final IOSession session, final Logger log, final Logger wireLog) {
         super();
         this.session = session;
-        this.id = id;
         this.log = log;
-        this.wireLog = new Wire(wireLog, this.id);
-        this.channel = new LoggingByteChannel();
-    }
-
-    public LoggingIOSession(final ProtocolIOSession session, final String id, final Logger log) {
-        this(session, id, log, null);
+        this.wireLog = wireLog;
     }
 
     @Override
@@ -77,42 +63,45 @@ class LoggingIOSession implements ProtocolIOSession {
 
     @Override
     public Lock getLock() {
-        return this.session.getLock();
+        return session.getLock();
     }
 
     @Override
     public boolean hasCommands() {
-        return this.session.hasCommands();
+        return session.hasCommands();
     }
 
     @Override
     public Command poll() {
-        return this.session.poll();
+        return session.poll();
     }
 
     @Override
     public void enqueue(final Command command, final Command.Priority priority) {
-        this.session.enqueue(command, priority);
+        session.enqueue(command, priority);
+        if (log.isDebugEnabled()) {
+            log.debug("{} Enqueued {} with priority {}", session, command.getClass().getSimpleName(), priority);
+        }
     }
 
     @Override
     public ByteChannel channel() {
-        return this.channel;
+        return session.channel();
     }
 
     @Override
     public SocketAddress getLocalAddress() {
-        return this.session.getLocalAddress();
+        return session.getLocalAddress();
     }
 
     @Override
     public SocketAddress getRemoteAddress() {
-        return this.session.getRemoteAddress();
+        return session.getRemoteAddress();
     }
 
     @Override
     public int getEventMask() {
-        return this.session.getEventMask();
+        return session.getEventMask();
     }
 
     private static String formatOps(final int ops) {
@@ -136,175 +125,214 @@ class LoggingIOSession implements ProtocolIOSession {
 
     @Override
     public void setEventMask(final int ops) {
-        this.session.setEventMask(ops);
-        if (this.log.isDebugEnabled()) {
-            this.log.debug(this.id + " " + this.session + ": Event mask set " + formatOps(ops));
+        session.setEventMask(ops);
+        if (log.isDebugEnabled()) {
+            log.debug("{} Event mask set {}", session, formatOps(ops));
         }
     }
 
     @Override
     public void setEvent(final int op) {
-        this.session.setEvent(op);
-        if (this.log.isDebugEnabled()) {
-            this.log.debug(this.id + " " + this.session + ": Event set " + formatOps(op));
+        session.setEvent(op);
+        if (log.isDebugEnabled()) {
+            log.debug("{} Event set {}", session, formatOps(op));
         }
     }
 
     @Override
     public void clearEvent(final int op) {
-        this.session.clearEvent(op);
-        if (this.log.isDebugEnabled()) {
-            this.log.debug(this.id + " " + this.session + ": Event cleared " + formatOps(op));
+        session.clearEvent(op);
+        if (log.isDebugEnabled()) {
+            log.debug("{} Event cleared {}", session, formatOps(op));
         }
+    }
+
+    @Override
+    public boolean isOpen() {
+        return session.isOpen();
     }
 
     @Override
     public void close() {
-        if (this.log.isDebugEnabled()) {
-            this.log.debug(this.id + " " + this.session + ": Close");
+        if (log.isDebugEnabled()) {
+            log.debug("{} Close", session);
         }
-        this.session.close();
+        session.close();
     }
 
     @Override
-    public int getStatus() {
-        return this.session.getStatus();
-    }
-
-    @Override
-    public boolean isClosed() {
-        return this.session.isClosed();
+    public Status getStatus() {
+        return session.getStatus();
     }
 
     @Override
     public void close(final CloseMode closeMode) {
-        if (this.log.isDebugEnabled()) {
-            this.log.debug(this.id + " " + this.session + ": Close " + closeMode);
+        if (log.isDebugEnabled()) {
+            log.debug("{} Close {}", session, closeMode);
         }
-        this.session.close(closeMode);
+        session.close(closeMode);
     }
 
     @Override
     public Timeout getSocketTimeout() {
-        return this.session.getSocketTimeout();
+        return session.getSocketTimeout();
     }
 
     @Override
     public void setSocketTimeout(final Timeout timeout) {
-        if (this.log.isDebugEnabled()) {
-            this.log.debug(this.id + " " + this.session + ": Set timeout " + timeout);
+        if (log.isDebugEnabled()) {
+            log.debug("{} Set timeout {}", session, timeout);
         }
-        this.session.setSocketTimeout(timeout);
+        session.setSocketTimeout(timeout);
     }
 
     @Override
     public long getLastReadTime() {
-        return this.session.getLastReadTime();
+        return session.getLastReadTime();
     }
 
     @Override
     public long getLastWriteTime() {
-        return this.session.getLastWriteTime();
+        return session.getLastWriteTime();
     }
 
     @Override
     public void updateReadTime() {
-        this.session.updateReadTime();
+        session.updateReadTime();
     }
 
     @Override
     public void updateWriteTime() {
-        this.session.updateWriteTime();
+        session.updateWriteTime();
     }
 
     @Override
     public long getLastEventTime() {
-        return this.session.getLastEventTime();
+        return session.getLastEventTime();
     }
 
     @Override
     public IOEventHandler getHandler() {
-        return this.session.getHandler();
+        return session.getHandler();
     }
 
     @Override
     public void upgrade(final IOEventHandler handler) {
-        this.session.upgrade(handler);
+        Args.notNull(handler, "Protocol handler");
+        if (log.isDebugEnabled()) {
+            log.debug("{} protocol upgrade {}", session, handler.getClass());
+        }
+        session.upgrade(new IOEventHandler() {
+
+            @Override
+            public void connected(final IOSession protocolSession) throws IOException {
+                handler.connected(protocolSession);
+            }
+
+            @Override
+            public void inputReady(final IOSession protocolSession, final ByteBuffer src) throws IOException {
+                if (src != null && wireLog.isDebugEnabled()) {
+                    final ByteBuffer b = src.duplicate();
+                    logData(b, "<< ");
+                }
+                handler.inputReady(protocolSession, src);
+            }
+
+            @Override
+            public void outputReady(final IOSession protocolSession) throws IOException {
+                handler.outputReady(protocolSession);
+            }
+
+            @Override
+            public void timeout(final IOSession protocolSession, final Timeout timeout) throws IOException {
+                handler.timeout(protocolSession, timeout);
+            }
+
+            @Override
+            public void exception(final IOSession protocolSession, final Exception cause) {
+                handler.exception(protocolSession, cause);
+            }
+
+            @Override
+            public void disconnected(final IOSession protocolSession) {
+                handler.disconnected(protocolSession);
+            }
+
+        });
+
+    }
+
+    private void logData(final ByteBuffer data, final String prefix) throws IOException {
+        final byte[] line = new byte[16];
+        final StringBuilder buf = new StringBuilder();
+        while (data.hasRemaining()) {
+            buf.setLength(0);
+            buf.append(session).append(" ").append(prefix);
+            final int chunk = Math.min(data.remaining(), line.length);
+            data.get(line, 0, chunk);
+
+            for (int i = 0; i < chunk; i++) {
+                final char ch = (char) line[i];
+                if (ch > Chars.SP && ch <= Chars.DEL) {
+                    buf.append(ch);
+                } else if (Character.isWhitespace(ch)) {
+                    buf.append(' ');
+                } else {
+                    buf.append('.');
+                }
+            }
+            for (int i = chunk; i < 17; i++) {
+                buf.append(' ');
+            }
+
+            for (int i = 0; i < chunk; i++) {
+                buf.append(' ');
+                final int b = line[i] & 0xff;
+                final String s = Integer.toHexString(b);
+                if (s.length() == 1) {
+                    buf.append("0");
+                }
+                buf.append(s);
+            }
+            wireLog.debug(buf.toString());
+        }
     }
 
     @Override
-    public void startTls(
-            final SSLContext sslContext,
-            final NamedEndpoint endpoint,
-            final SSLBufferMode sslBufferMode,
-            final SSLSessionInitializer initializer,
-            final SSLSessionVerifier verifier,
-            final Timeout handshakeTimeout) throws UnsupportedOperationException {
-        session.startTls(sslContext, endpoint, sslBufferMode, initializer, verifier, handshakeTimeout);
+    public int read(final ByteBuffer dst) throws IOException {
+        final int bytesRead = session.read(dst);
+        if (log.isDebugEnabled()) {
+            log.debug("{} {} bytes read", session, bytesRead);
+        }
+        if (bytesRead > 0 && wireLog.isDebugEnabled()) {
+            final ByteBuffer b = dst.duplicate();
+            final int p = b.position();
+            b.limit(p);
+            b.position(p - bytesRead);
+            logData(b, "<< ");
+        }
+        return bytesRead;
     }
 
     @Override
-    public TlsDetails getTlsDetails() {
-        return session.getTlsDetails();
-    }
-
-    @Override
-    public NamedEndpoint getInitialEndpoint() {
-        return session.getInitialEndpoint();
+    public int write(final ByteBuffer src) throws IOException {
+        final int byteWritten = session.write(src);
+        if (log.isDebugEnabled()) {
+            log.debug("{} {} bytes written", session, byteWritten);
+        }
+        if (byteWritten > 0 && wireLog.isDebugEnabled()) {
+            final ByteBuffer b = src.duplicate();
+            final int p = b.position();
+            b.limit(p);
+            b.position(p - byteWritten);
+            logData(b, ">> ");
+        }
+        return byteWritten;
     }
 
     @Override
     public String toString() {
-        return this.id + " " + this.session.toString();
-    }
-
-    class LoggingByteChannel implements ByteChannel {
-
-        @Override
-        public int read(final ByteBuffer dst) throws IOException {
-            final int bytesRead = session.channel().read(dst);
-            if (log.isDebugEnabled()) {
-                log.debug(id + " " + session + ": " + bytesRead + " bytes read");
-            }
-            if (bytesRead > 0 && wireLog.isEnabled()) {
-                final ByteBuffer b = dst.duplicate();
-                final int p = b.position();
-                b.limit(p);
-                b.position(p - bytesRead);
-                wireLog.input(b);
-            }
-            return bytesRead;
-        }
-
-        @Override
-        public int write(final ByteBuffer src) throws IOException {
-            final int byteWritten = session.channel().write(src);
-            if (log.isDebugEnabled()) {
-                log.debug(id + " " + session + ": " + byteWritten + " bytes written");
-            }
-            if (byteWritten > 0 && wireLog.isEnabled()) {
-                final ByteBuffer b = src.duplicate();
-                final int p = b.position();
-                b.limit(p);
-                b.position(p - byteWritten);
-                wireLog.output(b);
-            }
-            return byteWritten;
-        }
-
-        @Override
-        public void close() throws IOException {
-            if (log.isDebugEnabled()) {
-                log.debug(id + " " + session + ": Channel close");
-            }
-            session.channel().close();
-        }
-
-        @Override
-        public boolean isOpen() {
-            return session.channel().isOpen();
-        }
-
+        return session.toString();
     }
 
 }

@@ -35,12 +35,12 @@ import org.apache.hc.client5.http.RouteInfo;
 import org.apache.hc.client5.http.auth.AuthCache;
 import org.apache.hc.client5.http.auth.AuthExchange;
 import org.apache.hc.client5.http.auth.AuthScheme;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.cookie.CookieOrigin;
 import org.apache.hc.client5.http.cookie.CookieSpec;
-import org.apache.hc.client5.http.cookie.CookieSpecProvider;
+import org.apache.hc.client5.http.cookie.CookieSpecFactory;
 import org.apache.hc.client5.http.cookie.CookieStore;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.config.Lookup;
@@ -72,7 +72,7 @@ public class HttpClientContext extends HttpCoreContext {
 
     /**
      * Attribute name of a {@link org.apache.hc.core5.http.config.Lookup} object that represents
-     * the actual {@link CookieSpecProvider} registry.
+     * the actual {@link CookieSpecFactory} registry.
      */
     public static final String COOKIESPEC_REGISTRY   = "http.cookiespec-registry";
 
@@ -120,7 +120,7 @@ public class HttpClientContext extends HttpCoreContext {
 
     /**
      * Attribute name of a {@link org.apache.hc.core5.http.config.Lookup} object that represents
-     * the actual {@link AuthSchemeProvider} registry.
+     * the actual {@link AuthSchemeFactory} registry.
      */
     public static final String AUTHSCHEME_REGISTRY   = "http.authscheme-registry";
 
@@ -129,6 +129,12 @@ public class HttpClientContext extends HttpCoreContext {
      * represents the actual request configuration.
      */
     public static final String REQUEST_CONFIG = "http.request-config";
+
+    /**
+     * Attribute name of a {@link java.lang.String} object that represents the ID of the
+     * current message exchange.
+     */
+    public static final String EXCHANGE_ID = "http.exchange-id";
 
     public static HttpClientContext adapt(final HttpContext context) {
         Args.notNull(context, "HTTP context");
@@ -174,23 +180,24 @@ public class HttpClientContext extends HttpCoreContext {
         return getAttribute(COOKIE_ORIGIN, CookieOrigin.class);
     }
 
-    private <T> Lookup<T> getLookup(final String name, final Class<T> clazz) {
-        return getAttribute(name, Lookup.class);
+    @SuppressWarnings("unchecked")
+    private <T> Lookup<T> getLookup(final String name) {
+        return (Lookup<T>) getAttribute(name, Lookup.class);
     }
 
-    public Lookup<CookieSpecProvider> getCookieSpecRegistry() {
-        return getLookup(COOKIESPEC_REGISTRY, CookieSpecProvider.class);
+    public Lookup<CookieSpecFactory> getCookieSpecRegistry() {
+        return getLookup(COOKIESPEC_REGISTRY);
     }
 
-    public void setCookieSpecRegistry(final Lookup<CookieSpecProvider> lookup) {
+    public void setCookieSpecRegistry(final Lookup<CookieSpecFactory> lookup) {
         setAttribute(COOKIESPEC_REGISTRY, lookup);
     }
 
-    public Lookup<AuthSchemeProvider> getAuthSchemeRegistry() {
-        return getLookup(AUTHSCHEME_REGISTRY, AuthSchemeProvider.class);
+    public Lookup<AuthSchemeFactory> getAuthSchemeRegistry() {
+        return getLookup(AUTHSCHEME_REGISTRY);
     }
 
-    public void setAuthSchemeRegistry(final Lookup<AuthSchemeProvider> lookup) {
+    public void setAuthSchemeRegistry(final Lookup<AuthSchemeFactory> lookup) {
         setAttribute(AUTHSCHEME_REGISTRY, lookup);
     }
 
@@ -273,6 +280,20 @@ public class HttpClientContext extends HttpCoreContext {
 
     public void setRequestConfig(final RequestConfig config) {
         setAttribute(REQUEST_CONFIG, config);
+    }
+
+    /**
+     * @since 5.1
+     */
+    public String getExchangeId() {
+        return getAttribute(EXCHANGE_ID, String.class);
+    }
+
+    /**
+     * @since 5.1
+     */
+    public void setExchangeId(final String id) {
+        setAttribute(EXCHANGE_ID, id);
     }
 
 }

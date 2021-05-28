@@ -54,6 +54,7 @@ import org.apache.hc.core5.http.ProtocolVersion;
 import org.apache.hc.core5.http.URIScheme;
 import org.apache.hc.core5.http.message.MessageSupport;
 import org.apache.hc.core5.http.protocol.HttpContext;
+import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.VersionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,7 +78,7 @@ public class CachingExecBase {
     final RequestProtocolCompliance requestCompliance;
     final CacheConfig cacheConfig;
 
-    final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(CachingExecBase.class);
 
     CachingExecBase(
             final CacheValidityPolicy validityPolicy,
@@ -152,22 +153,22 @@ public class CachingExecBase {
 
     void recordCacheMiss(final HttpHost target, final HttpRequest request) {
         cacheMisses.getAndIncrement();
-        if (log.isTraceEnabled()) {
-            log.debug("Cache miss [host: " + target + "; uri: " + request.getRequestUri() + "]");
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Cache miss [host: {}; uri: {}]", target, request.getRequestUri());
         }
     }
 
     void recordCacheHit(final HttpHost target, final HttpRequest request) {
         cacheHits.getAndIncrement();
-        if (log.isTraceEnabled()) {
-            log.debug("Cache hit [host: " + target + "; uri: " + request.getRequestUri() + "]");
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Cache hit [host: {}; uri: {}]", target, request.getRequestUri());
         }
     }
 
     void recordCacheFailure(final HttpHost target, final HttpRequest request) {
         cacheMisses.getAndIncrement();
-        if (log.isTraceEnabled()) {
-            log.debug("Cache failure [host: " + target + "; uri: " + request.getRequestUri() + "]");
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Cache failure [host: {}; uri: {}]", target, request.getRequestUri());
         }
     }
 
@@ -189,7 +190,7 @@ public class CachingExecBase {
             cachedResponse = responseGenerator.generateResponse(request, entry);
         }
         setResponseStatus(context, CacheResponseStatus.CACHE_HIT);
-        if (validityPolicy.getStalenessSecs(entry, now) > 0L) {
+        if (TimeValue.isPositive(validityPolicy.getStaleness(entry, now))) {
             cachedResponse.addHeader(HeaderConstants.WARNING,"110 localhost \"Response is stale\"");
         }
         return cachedResponse;
@@ -234,7 +235,7 @@ public class CachingExecBase {
         while (it.hasNext()) {
             final HeaderElement elt = it.next();
             if ("only-if-cached".equals(elt.getName())) {
-                log.debug("Request marked only-if-cached");
+                LOG.debug("Request marked only-if-cached");
                 return false;
             }
         }
@@ -247,10 +248,11 @@ public class CachingExecBase {
             final HeaderElement elt = it.next();
             if (HeaderConstants.CACHE_CONTROL_MAX_STALE.equals(elt.getName())) {
                 try {
-                    final int maxstale = Integer.parseInt(elt.getValue());
-                    final long age = validityPolicy.getCurrentAgeSecs(entry, now);
-                    final long lifetime = validityPolicy.getFreshnessLifetimeSecs(entry);
-                    if (age - lifetime > maxstale) {
+                    // in seconds
+                    final int maxStale = Integer.parseInt(elt.getValue());
+                    final TimeValue age = validityPolicy.getCurrentAge(entry, now);
+                    final TimeValue lifetime = validityPolicy.getFreshnessLifetime(entry);
+                    if (age.toSeconds() - lifetime.toSeconds() > maxStale) {
                         return true;
                     }
                 } catch (final NumberFormatException nfe) {
@@ -323,11 +325,7 @@ public class CachingExecBase {
         }
 
         final Header h = request.getFirstHeader(HeaderConstants.MAX_FORWARDS);
-        if (!"0".equals(h != null ? h.getValue() : null)) {
-            return false;
-        }
-
-        return true;
+        return "0".equals(h != null ? h.getValue() : null);
     }
 
     boolean revalidationResponseIsTooOld(final HttpResponse backendResponse, final HttpCacheEntry cacheEntry) {

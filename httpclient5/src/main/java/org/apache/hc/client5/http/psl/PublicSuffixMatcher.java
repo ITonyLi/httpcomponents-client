@@ -29,10 +29,10 @@ package org.apache.hc.client5.http.psl;
 import java.net.IDN;
 import java.util.Collection;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.hc.client5.http.utils.DnsUtils;
 import org.apache.hc.core5.annotation.Contract;
 import org.apache.hc.core5.annotation.ThreadingBehavior;
 import org.apache.hc.core5.util.Args;
@@ -99,24 +99,15 @@ public final class PublicSuffixMatcher {
         }
     }
 
-    private static boolean hasEntry(final Map<String, DomainType> map, final String rule, final DomainType expectedType) {
+    private static DomainType findEntry(final Map<String, DomainType> map, final String rule) {
         if (map == null) {
-            return false;
+            return null;
         }
-        final DomainType domainType = map.get(rule);
-        if (domainType == null) {
-            return false;
-        } else {
-            return expectedType == null || domainType.equals(expectedType);
-        }
+        return map.get(rule);
     }
 
-    private boolean hasRule(final String rule, final DomainType expectedType) {
-        return hasEntry(this.rules, rule, expectedType);
-    }
-
-    private boolean hasException(final String exception, final DomainType expectedType) {
-        return hasEntry(this.exceptions, exception, expectedType);
+    private static boolean match(final DomainType domainType, final DomainType expectedType) {
+        return domainType != null && (expectedType == null || domainType.equals(expectedType));
     }
 
     /**
@@ -147,16 +138,20 @@ public final class PublicSuffixMatcher {
         if (domain.startsWith(".")) {
             return null;
         }
-        final String normalized = domain.toLowerCase(Locale.ROOT);
-        String segment = normalized;
+        String segment = DnsUtils.normalize(domain);
         String result = null;
         while (segment != null) {
             // An exception rule takes priority over any other matching rule.
             final String key = IDN.toUnicode(segment);
-            if (hasException(key, expectedType)) {
+            final DomainType exceptionRule = findEntry(exceptions, key);
+            if (match(exceptionRule, expectedType)) {
                 return segment;
             }
-            if (hasRule(key, expectedType)) {
+            final DomainType domainRule = findEntry(rules, key);
+            if (match(domainRule, expectedType)) {
+                if (domainRule == DomainType.PRIVATE) {
+                    return segment;
+                }
                 return result;
             }
 
@@ -164,14 +159,25 @@ public final class PublicSuffixMatcher {
             final String nextSegment = nextdot != -1 ? segment.substring(nextdot + 1) : null;
 
             if (nextSegment != null) {
-                if (hasRule("*." + IDN.toUnicode(nextSegment), expectedType)) {
+                final DomainType wildcardDomainRule = findEntry(rules, "*." + IDN.toUnicode(nextSegment));
+                if (match(wildcardDomainRule, expectedType)) {
+                    if (wildcardDomainRule == DomainType.PRIVATE) {
+                        return segment;
+                    }
                     return result;
                 }
             }
             result = segment;
             segment = nextSegment;
         }
-        return result;
+
+        // If no expectations then this result is good.
+        if (expectedType == null || expectedType == DomainType.UNKNOWN) {
+            return result;
+        }
+
+        // If we did have expectations apparently there was no match
+        return null;
     }
 
     /**

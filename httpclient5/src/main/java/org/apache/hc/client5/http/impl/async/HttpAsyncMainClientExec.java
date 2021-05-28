@@ -66,7 +66,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Usually the last HTTP/1.1 request execution handler in the asynchronous
  * request execution chain that is responsible for execution of
- * request / response exchanges with the opposite endpoint.
+ * request/response exchanges with the opposite endpoint.
  *
  * @since 5.0
  */
@@ -74,7 +74,7 @@ import org.slf4j.LoggerFactory;
 @Internal
 class HttpAsyncMainClientExec implements AsyncExecChainHandler {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(HttpAsyncMainClientExec.class);
 
     private final ConnectionKeepAliveStrategy keepAliveStrategy;
     private final UserTokenHandler userTokenHandler;
@@ -97,8 +97,8 @@ class HttpAsyncMainClientExec implements AsyncExecChainHandler {
         final HttpClientContext clientContext = scope.clientContext;
         final AsyncExecRuntime execRuntime = scope.execRuntime;
 
-        if (log.isDebugEnabled()) {
-            log.debug(exchangeId + ": executing " + new RequestLine(request));
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("{} executing {}", exchangeId, new RequestLine(request));
         }
 
         final AtomicInteger messageCountDown = new AtomicInteger(2);
@@ -241,10 +241,10 @@ class HttpAsyncMainClientExec implements AsyncExecChainHandler {
 
         };
 
-        if (log.isDebugEnabled()) {
+        if (LOG.isDebugEnabled()) {
             operation.setDependency(execRuntime.execute(
                     exchangeId,
-                    new LoggingAsyncClientExchangeHandler(log, exchangeId, internalExchangeHandler),
+                    new LoggingAsyncClientExchangeHandler(LOG, exchangeId, internalExchangeHandler),
                     clientContext));
         } else {
             operation.setDependency(execRuntime.execute(exchangeId, internalExchangeHandler, clientContext));

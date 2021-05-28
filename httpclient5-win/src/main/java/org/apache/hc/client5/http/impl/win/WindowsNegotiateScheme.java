@@ -32,12 +32,12 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.hc.client5.http.RouteInfo;
 import org.apache.hc.client5.http.auth.AuthChallenge;
 import org.apache.hc.client5.http.auth.AuthScheme;
-import org.apache.hc.client5.http.auth.AuthSchemes;
 import org.apache.hc.client5.http.auth.AuthenticationException;
 import org.apache.hc.client5.http.auth.BasicUserPrincipal;
 import org.apache.hc.client5.http.auth.ChallengeType;
 import org.apache.hc.client5.http.auth.CredentialsProvider;
 import org.apache.hc.client5.http.auth.MalformedChallengeException;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.core5.annotation.Experimental;
 import org.apache.hc.core5.http.HttpHost;
@@ -45,6 +45,7 @@ import org.apache.hc.core5.http.HttpRequest;
 import org.apache.hc.core5.http.protocol.HttpContext;
 import org.apache.hc.core5.net.URIAuthority;
 import org.apache.hc.core5.util.Args;
+import org.apache.hc.core5.util.TextUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,10 +72,10 @@ import com.sun.jna.ptr.IntByReference;
 @Experimental
 public class WindowsNegotiateScheme implements AuthScheme {
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(WindowsNegotiateScheme.class);
 
     // NTLM or Negotiate
-    private final String scheme;
+    private final String schemeName;
     private final String servicePrincipalName;
 
     private ChallengeType challengeType;
@@ -83,15 +84,15 @@ public class WindowsNegotiateScheme implements AuthScheme {
     private CtxtHandle sspiContext;
     private boolean continueNeeded;
 
-    WindowsNegotiateScheme(final String scheme, final String servicePrincipalName) {
+    WindowsNegotiateScheme(final String schemeName, final String servicePrincipalName) {
         super();
 
-        this.scheme = (scheme == null) ? AuthSchemes.SPNEGO.ident : scheme;
+        this.schemeName = (schemeName == null) ? StandardAuthScheme.SPNEGO : schemeName;
         this.continueNeeded = true;
         this.servicePrincipalName = servicePrincipalName;
 
-        if (this.log.isDebugEnabled()) {
-            this.log.debug("Created WindowsNegotiateScheme using " + this.scheme);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Created WindowsNegotiateScheme using {}", this.schemeName);
         }
     }
 
@@ -115,7 +116,7 @@ public class WindowsNegotiateScheme implements AuthScheme {
 
     @Override
     public String getName() {
-        return scheme;
+        return schemeName;
     }
 
     @Override
@@ -133,12 +134,9 @@ public class WindowsNegotiateScheme implements AuthScheme {
             final AuthChallenge authChallenge,
             final HttpContext context) throws MalformedChallengeException {
         Args.notNull(authChallenge, "AuthChallenge");
-        if (authChallenge.getValue() == null) {
-            throw new MalformedChallengeException("Missing auth challenge");
-        }
         challengeType = authChallenge.getChallengeType();
         challenge = authChallenge.getValue();
-        if (challenge.isEmpty()) {
+        if (TextUtils.isBlank(challenge)) {
             if (clientCred != null) {
                 dispose(); // run cleanup first before throwing an exception otherwise can leak OS resources
                 if (continueNeeded) {
@@ -186,7 +184,7 @@ public class WindowsNegotiateScheme implements AuthScheme {
 
                 clientCred = new CredHandle();
                 final int rc = Secur32.INSTANCE.AcquireCredentialsHandle(username,
-                        scheme, Sspi.SECPKG_CRED_OUTBOUND, null, null, null, null,
+                        schemeName, Sspi.SECPKG_CRED_OUTBOUND, null, null, null, null,
                         clientCred, lifetime);
 
                 if (WinError.SEC_E_OK != rc) {
@@ -220,7 +218,7 @@ public class WindowsNegotiateScheme implements AuthScheme {
                 throw ex;
             }
         }
-        return scheme + " " + response;
+        return schemeName + " " + response;
     }
 
     private void failAuthCleanup() {
@@ -259,8 +257,8 @@ public class WindowsNegotiateScheme implements AuthScheme {
                 }
             }
         }
-        if (this.log.isDebugEnabled()) {
-            this.log.debug("Using SPN: " + spn);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Using SPN: {}", spn);
         }
         return spn;
     }

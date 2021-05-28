@@ -31,6 +31,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.security.AccessController;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -55,6 +58,7 @@ import org.apache.hc.core5.io.Closer;
 import org.apache.hc.core5.ssl.SSLContexts;
 import org.apache.hc.core5.ssl.SSLInitializationException;
 import org.apache.hc.core5.util.Args;
+import org.apache.hc.core5.util.Asserts;
 import org.apache.hc.core5.util.TimeValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,7 +83,7 @@ public class SSLConnectionSocketFactory implements LayeredConnectionSocketFactor
             Pattern.compile(WEAK_KEY_EXCHANGES, Pattern.CASE_INSENSITIVE),
             Pattern.compile(WEAK_CIPHERS, Pattern.CASE_INSENSITIVE)));
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
+    private static final Logger LOG = LoggerFactory.getLogger(SSLConnectionSocketFactory.class);
 
     /**
      * Obtains default SSL socket factory with an SSL context based on the standard JSSE
@@ -117,7 +121,7 @@ public class SSLConnectionSocketFactory implements LayeredConnectionSocketFactor
         return false;
     }
 
-    private final javax.net.ssl.SSLSocketFactory socketfactory;
+    private final javax.net.ssl.SSLSocketFactory socketFactory;
     private final HostnameVerifier hostnameVerifier;
     private final String[] supportedProtocols;
     private final String[] supportedCipherSuites;
@@ -152,24 +156,24 @@ public class SSLConnectionSocketFactory implements LayeredConnectionSocketFactor
      * @since 4.4
      */
     public SSLConnectionSocketFactory(
-            final javax.net.ssl.SSLSocketFactory socketfactory,
+            final javax.net.ssl.SSLSocketFactory socketFactory,
             final HostnameVerifier hostnameVerifier) {
-        this(socketfactory, null, null, hostnameVerifier);
+        this(socketFactory, null, null, hostnameVerifier);
     }
 
     /**
      * @since 4.4
      */
     public SSLConnectionSocketFactory(
-            final javax.net.ssl.SSLSocketFactory socketfactory,
+            final javax.net.ssl.SSLSocketFactory socketFactory,
             final String[] supportedProtocols,
             final String[] supportedCipherSuites,
             final HostnameVerifier hostnameVerifier) {
-        this.socketfactory = Args.notNull(socketfactory, "SSL socket factory");
+        this.socketFactory = Args.notNull(socketFactory, "SSL socket factory");
         this.supportedProtocols = supportedProtocols;
         this.supportedCipherSuites = supportedCipherSuites;
         this.hostnameVerifier = hostnameVerifier != null ? hostnameVerifier : HttpsSupport.getDefaultHostnameVerifier();
-        this.tlsSessionValidator = new TlsSessionValidator(log);
+        this.tlsSessionValidator = new TlsSessionValidator(LOG);
     }
 
     /**
@@ -203,13 +207,22 @@ public class SSLConnectionSocketFactory implements LayeredConnectionSocketFactor
             sock.bind(localAddress);
         }
         try {
-            if (TimeValue.isPositive(connectTimeout) && sock.getSoTimeout() == 0) {
-                sock.setSoTimeout(connectTimeout.toMillisIntBound());
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Connecting socket to {} with timeout {}", remoteAddress, connectTimeout);
             }
-            if (this.log.isDebugEnabled()) {
-                this.log.debug("Connecting socket to " + remoteAddress + " with timeout " + connectTimeout);
+            // Run this under a doPrivileged to support lib users that run under a SecurityManager this allows granting connect permissions
+            // only to this library
+            try {
+                AccessController.doPrivileged((PrivilegedExceptionAction<Object>) () -> {
+                    sock.connect(remoteAddress, connectTimeout != null ? connectTimeout.toMillisecondsIntBound() : 0);
+                    return null;
+                });
+            } catch (final PrivilegedActionException e) {
+                Asserts.check(e.getCause() instanceof  IOException,
+                        "method contract violation only checked exceptions are wrapped: " + e.getCause());
+                // only checked exceptions are wrapped - error and RTExceptions are rethrown by doPrivileged
+                throw (IOException) e.getCause();
             }
-            sock.connect(remoteAddress, connectTimeout != null ? connectTimeout.toMillisIntBound() : 0);
         } catch (final IOException ex) {
             Closer.closeQuietly(sock);
             throw ex;
@@ -217,7 +230,7 @@ public class SSLConnectionSocketFactory implements LayeredConnectionSocketFactor
         // Setup SSL layering if necessary
         if (sock instanceof SSLSocket) {
             final SSLSocket sslsock = (SSLSocket) sock;
-            this.log.debug("Starting handshake");
+            LOG.debug("Starting handshake");
             sslsock.startHandshake();
             verifyHostname(sslsock, host.getHostName());
             return sock;
@@ -231,7 +244,7 @@ public class SSLConnectionSocketFactory implements LayeredConnectionSocketFactor
             final String target,
             final int port,
             final HttpContext context) throws IOException {
-        final SSLSocket sslsock = (SSLSocket) this.socketfactory.createSocket(
+        final SSLSocket sslsock = (SSLSocket) this.socketFactory.createSocket(
                 socket,
                 target,
                 port,
@@ -247,13 +260,13 @@ public class SSLConnectionSocketFactory implements LayeredConnectionSocketFactor
             sslsock.setEnabledCipherSuites(TlsCiphers.excludeWeak(sslsock.getEnabledCipherSuites()));
         }
 
-        if (this.log.isDebugEnabled()) {
-            this.log.debug("Enabled protocols: " + Arrays.asList(sslsock.getEnabledProtocols()));
-            this.log.debug("Enabled cipher suites:" + Arrays.asList(sslsock.getEnabledCipherSuites()));
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Enabled protocols: {}", (Object) sslsock.getEnabledProtocols());
+            LOG.debug("Enabled cipher suites: {}", (Object) sslsock.getEnabledCipherSuites());
         }
 
         prepareSocket(sslsock);
-        this.log.debug("Starting handshake");
+        LOG.debug("Starting handshake");
         sslsock.startHandshake();
         verifyHostname(sslsock, target);
         return sslsock;
@@ -291,8 +304,8 @@ public class SSLConnectionSocketFactory implements LayeredConnectionSocketFactor
 
     protected void verifySession(
             final String hostname,
-            final SSLSession sslsession) throws SSLException {
-        tlsSessionValidator.verifySession(hostname, sslsession, hostnameVerifier);
+            final SSLSession sslSession) throws SSLException {
+        tlsSessionValidator.verifySession(hostname, sslSession, hostnameVerifier);
     }
 
 }

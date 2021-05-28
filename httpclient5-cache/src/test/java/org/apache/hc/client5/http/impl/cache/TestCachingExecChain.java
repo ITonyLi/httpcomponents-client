@@ -27,13 +27,13 @@
 package org.apache.hc.client5.http.impl.cache;
 
 import static org.easymock.EasyMock.anyObject;
+import static org.easymock.EasyMock.createNiceMock;
 import static org.easymock.EasyMock.eq;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
 import static org.easymock.EasyMock.isA;
-import static org.easymock.EasyMock.same;
-import static org.easymock.EasyMock.createNiceMock;
 import static org.easymock.EasyMock.replay;
+import static org.easymock.EasyMock.same;
 import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -50,6 +50,7 @@ import java.util.List;
 
 import org.apache.hc.client5.http.HttpRoute;
 import org.apache.hc.client5.http.async.methods.SimpleHttpResponse;
+import org.apache.hc.client5.http.auth.StandardAuthScheme;
 import org.apache.hc.client5.http.cache.CacheResponseStatus;
 import org.apache.hc.client5.http.cache.HttpCacheContext;
 import org.apache.hc.client5.http.cache.HttpCacheEntry;
@@ -58,7 +59,6 @@ import org.apache.hc.client5.http.classic.ExecChain;
 import org.apache.hc.client5.http.classic.ExecRuntime;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpOptions;
-import org.apache.hc.client5.http.impl.classic.ClassicRequestCopier;
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.client5.http.utils.DateUtils;
 import org.apache.hc.core5.http.ClassicHttpRequest;
@@ -73,11 +73,13 @@ import org.apache.hc.core5.http.HttpVersion;
 import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.InputStreamEntity;
+import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.apache.hc.core5.http.message.BasicClassicHttpRequest;
 import org.apache.hc.core5.http.message.BasicClassicHttpResponse;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.apache.hc.core5.net.URIAuthority;
 import org.apache.hc.core5.util.ByteArrayBuffer;
+import org.apache.hc.core5.util.TimeValue;
 import org.easymock.Capture;
 import org.easymock.EasyMock;
 import org.easymock.IExpectationSetters;
@@ -163,8 +165,10 @@ public abstract class TestCachingExecChain {
     public abstract CachingExec createCachingExecChain(HttpCache cache, CacheConfig config);
 
     protected ClassicHttpResponse execute(final ClassicHttpRequest request) throws IOException, HttpException {
-        return impl.execute(ClassicRequestCopier.INSTANCE.copy(request), new ExecChain.Scope(
-                "test", route, request, mockEndpoint, context), mockExecChain);
+        return impl.execute(
+                ClassicRequestBuilder.copy(request).build(),
+                new ExecChain.Scope("test", route, request, mockEndpoint, context),
+                mockExecChain);
     }
 
     public static ClassicHttpRequest eqRequest(final ClassicHttpRequest in) {
@@ -315,7 +319,7 @@ public abstract class TestCachingExecChain {
         cacheEntrySuitable(true);
         responseIsGeneratedFromCache(SimpleHttpResponse.create(HttpStatus.SC_OK));
         requestIsFatallyNonCompliant(null);
-        entryHasStaleness(0L);
+        entryHasStaleness(TimeValue.ZERO_MILLISECONDS);
 
         replayMocks();
         final ClassicHttpResponse result = execute(request);
@@ -352,7 +356,7 @@ public abstract class TestCachingExecChain {
         cacheEntrySuitable(true);
         getCacheEntryReturns(mockCacheEntry);
         responseIsGeneratedFromCache(SimpleHttpResponse.create(HttpStatus.SC_OK));
-        entryHasStaleness(0L);
+        entryHasStaleness(TimeValue.ZERO_MILLISECONDS);
 
         replayMocks();
         execute(request);
@@ -737,9 +741,9 @@ public abstract class TestCachingExecChain {
             .setSharedCache(true).build());
         final Date now = new Date();
         final ClassicHttpRequest req1 = new HttpOptions("http://foo.example.com/");
-        req1.setHeader("Authorization", "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+        req1.setHeader("Authorization", StandardAuthScheme.BASIC + " QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
         final ClassicHttpRequest req2 = new HttpGet("http://foo.example.com/");
-        req2.setHeader("Authorization", "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
+        req2.setHeader("Authorization", StandardAuthScheme.BASIC + " QWxhZGRpbjpvcGVuIHNlc2FtZQ==");
         final ClassicHttpResponse resp1 = new BasicClassicHttpResponse(HttpStatus.SC_NO_CONTENT, "No Content");
         resp1.setHeader("Content-Length", "0");
         resp1.setHeader("ETag", "\"options-etag\"");
@@ -1205,7 +1209,7 @@ public abstract class TestCachingExecChain {
         final ClassicHttpResponse resp1 = new BasicClassicHttpResponse(HttpStatus.SC_OK,
             "OK");
         resp1.setEntity(new InputStreamEntity(new InputStream() {
-            private boolean closed = false;
+            private boolean closed;
 
             @Override
             public void close() throws IOException {
@@ -1347,7 +1351,7 @@ public abstract class TestCachingExecChain {
         getCacheEntryReturns(entry);
         cacheEntrySuitable(true);
         responseIsGeneratedFromCache(SimpleHttpResponse.create(HttpStatus.SC_OK));
-        entryHasStaleness(0);
+        entryHasStaleness(TimeValue.ZERO_MILLISECONDS);
 
         replayMocks();
         final ClassicHttpResponse resp = execute(request);
@@ -1674,9 +1678,9 @@ public abstract class TestCachingExecChain {
             .andReturn(suitable);
     }
 
-    private void entryHasStaleness(final long staleness) {
+    private void entryHasStaleness(final TimeValue staleness) {
         expect(
-            mockValidityPolicy.getStalenessSecs((HttpCacheEntry) anyObject(), (Date) anyObject()))
+            mockValidityPolicy.getStaleness((HttpCacheEntry) anyObject(), (Date) anyObject()))
             .andReturn(staleness);
     }
 

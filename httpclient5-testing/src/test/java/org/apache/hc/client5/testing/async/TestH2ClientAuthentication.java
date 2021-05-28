@@ -30,7 +30,8 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.hc.client5.http.AuthenticationStrategy;
-import org.apache.hc.client5.http.auth.AuthSchemeProvider;
+import org.apache.hc.client5.http.auth.AuthSchemeFactory;
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
 import org.apache.hc.client5.http.impl.async.H2AsyncClientBuilder;
@@ -67,7 +68,10 @@ public class TestH2ClientAuthentication extends AbstractHttpAsyncClientAuthentic
             clientBuilder = H2AsyncClientBuilder.create()
                     .setDefaultRequestConfig(RequestConfig.custom()
                             .setConnectionRequestTimeout(TIMEOUT)
+                            .build())
+                    .setDefaultConnectionConfig(ConnectionConfig.custom()
                             .setConnectTimeout(TIMEOUT)
+                            .setSocketTimeout(TIMEOUT)
                             .build())
                     .setTlsStrategy(new DefaultClientTlsStrategy(SSLTestContexts.createClientSSLContext()));
         }
@@ -79,7 +83,7 @@ public class TestH2ClientAuthentication extends AbstractHttpAsyncClientAuthentic
     }
 
     @Override
-    void setDefaultAuthSchemeRegistry(final Lookup<AuthSchemeProvider> authSchemeRegistry) {
+    void setDefaultAuthSchemeRegistry(final Lookup<AuthSchemeFactory> authSchemeRegistry) {
         clientBuilder.setDefaultAuthSchemeRegistry(authSchemeRegistry);
     }
 

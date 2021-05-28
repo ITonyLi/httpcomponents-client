@@ -40,9 +40,7 @@ import org.apache.hc.core5.util.Args;
 import org.apache.hc.core5.util.ByteArrayBuffer;
 
 /**
- * HttpMultipart represents a collection of MIME multipart encoded content bodies. This class is
- * capable of operating either in the strict (RFC 822, RFC 2045, RFC 2046 compliant) or
- * the browser compatible modes.
+ * HttpMultipart represents a collection of MIME multipart encoded content bodies.
  *
  * @since 4.3
  */
@@ -52,7 +50,7 @@ abstract class AbstractMultipartFormat {
             final Charset charset, final String string) {
         final ByteBuffer encoded = charset.encode(CharBuffer.wrap(string));
         final ByteArrayBuffer bab = new ByteArrayBuffer(encoded.remaining());
-        bab.append(encoded.array(), encoded.position(), encoded.remaining());
+        bab.append(encoded.array(), encoded.arrayOffset() + encoded.position(), encoded.remaining());
         return bab;
     }
 
@@ -74,7 +72,7 @@ abstract class AbstractMultipartFormat {
     }
 
     static void writeField(
-            final MinimalField field, final OutputStream out) throws IOException {
+            final MimeField field, final OutputStream out) throws IOException {
         writeBytes(field.getName(), out);
         writeBytes(FIELD_SEP, out);
         writeBytes(field.getBody(), out);
@@ -82,7 +80,7 @@ abstract class AbstractMultipartFormat {
     }
 
     static void writeField(
-            final MinimalField field, final Charset charset, final OutputStream out) throws IOException {
+            final MimeField field, final Charset charset, final OutputStream out) throws IOException {
         writeBytes(field.getName(), charset, out);
         writeBytes(FIELD_SEP, out);
         writeBytes(field.getBody(), charset, out);
@@ -91,7 +89,7 @@ abstract class AbstractMultipartFormat {
 
     static final ByteArrayBuffer FIELD_SEP = encode(StandardCharsets.ISO_8859_1, ": ");
     static final ByteArrayBuffer CR_LF = encode(StandardCharsets.ISO_8859_1, "\r\n");
-    static final ByteArrayBuffer TWO_DASHES = encode(StandardCharsets.ISO_8859_1, "--");
+    static final ByteArrayBuffer TWO_HYPHENS = encode(StandardCharsets.ISO_8859_1, "--");
 
     final Charset charset;
     final String boundary;
@@ -122,7 +120,7 @@ abstract class AbstractMultipartFormat {
 
         final ByteArrayBuffer boundaryEncoded = encode(this.charset, this.boundary);
         for (final MultipartPart part: getParts()) {
-            writeBytes(TWO_DASHES, out);
+            writeBytes(TWO_HYPHENS, out);
             writeBytes(boundaryEncoded, out);
             writeBytes(CR_LF, out);
 
@@ -135,9 +133,9 @@ abstract class AbstractMultipartFormat {
             }
             writeBytes(CR_LF, out);
         }
-        writeBytes(TWO_DASHES, out);
+        writeBytes(TWO_HYPHENS, out);
         writeBytes(boundaryEncoded, out);
-        writeBytes(TWO_DASHES, out);
+        writeBytes(TWO_HYPHENS, out);
         writeBytes(CR_LF, out);
     }
 

@@ -36,6 +36,7 @@ import org.apache.hc.core5.http.ProtocolException;
 import org.apache.hc.core5.http.message.BasicHttpRequest;
 import org.apache.hc.core5.net.URIAuthority;
 import org.hamcrest.CoreMatchers;
+import org.hamcrest.MatcherAssert;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -45,18 +46,19 @@ public class TestRoutingSupport {
     public void testDetermineHost() throws Exception {
         final HttpRequest request1 = new BasicHttpRequest("GET", "/");
         final HttpHost host1 = RoutingSupport.determineHost(request1);
-        Assert.assertThat(host1, CoreMatchers.nullValue());
+        MatcherAssert.assertThat(host1, CoreMatchers.nullValue());
 
         final HttpRequest request2 = new BasicHttpRequest("GET", new URI("https://somehost:8443/"));
         final HttpHost host2 = RoutingSupport.determineHost(request2);
-        Assert.assertThat(host2, CoreMatchers.equalTo(new HttpHost("https", "somehost", 8443)));
+        MatcherAssert.assertThat(host2, CoreMatchers.equalTo(new HttpHost("https", "somehost", 8443)));
     }
 
-    @Test(expected = ProtocolException.class)
+    @Test
     public void testDetermineHostMissingScheme() throws Exception {
         final HttpRequest request1 = new BasicHttpRequest("GET", "/");
         request1.setAuthority(new URIAuthority("host"));
-        RoutingSupport.determineHost(request1);
+        Assert.assertThrows(ProtocolException.class, () ->
+                RoutingSupport.determineHost(request1));
     }
 
 }
